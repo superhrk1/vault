@@ -63,18 +63,20 @@ const Crypto = {
 //  STATE
 // ══════════════════════════════════════════════════════════
 let STATE = {
-  masterKey   : null,   // plaintext password in memory only
-  items       : [],     // decrypted items in memory only
-  tab         : "all",
-  favOnly     : false,
-  activeTag   : null,
-  sort        : "name",
-  expandedId  : null,
-  pwVisible   : {},
-  editId      : null,
-  mTags       : [],
-  mType       : "password",
-  genOpts     : { upper:true, lower:true, num:true, sym:true },
+  masterKey        : null,   // plaintext password in memory only
+  items            : [],     // decrypted items in memory only
+  tab              : "all",
+  favOnly          : false,
+  activeTags       : [],     // multi-select tag filter
+  highPriorityOnly : true,   // home screen defaults to high-priority items
+  sort             : "name",
+  expandedId       : null,
+  pwVisible        : {},
+  editId           : null,
+  mTags            : [],
+  mType            : "password",
+  mPriority        : "high", // priority for current form
+  genOpts          : { upper:true, lower:true, num:true, sym:true },
   drive: {
     token     : null,
     fileId    : null,
@@ -367,7 +369,7 @@ async function pullFromDrive() {
       if (!STATE.items.find(i => i.id === item.id)) { STATE.items.push(item); added++; }
     }
     await persistItems();
-    renderAll(); renderTagStrip(); updateStats();
+    renderAll(); updateStats();
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
@@ -447,7 +449,7 @@ async function removeItem(id) {
   STATE.items = STATE.items.filter(i => i.id !== id);
   await persistItems();
   if (STATE.drive.token) triggerSync();
-  renderAll(); renderTagStrip(); updateStats();
+  renderAll(); updateStats();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -462,19 +464,18 @@ function getAllTags() {
   return [...s].sort();
 }
 
-function renderTagStrip() {
-  const tags  = getAllTags();
-  const strip = $("tag-strip");
-  if (!tags.length) { strip.style.display = "none"; return; }
-  strip.style.display = "flex";
-  strip.innerHTML = tags.map(t =>
-    `<span class="tpill${STATE.activeTag===t?" on":""}" onclick="setTag('${esc(t)}')">#${esc(t)}</span>`
-  ).join("");
+function updateTagPill() {
+  const pill = $("tag-pill"), btn = $("tag-btn");
+  const n = STATE.activeTags.length;
+  if (pill) { pill.style.display = n ? "flex" : "none"; pill.textContent = `🏷 ${n} tag${n===1?"":"s"}`; }
+  if (btn)  { btn.textContent = n ? `🏷 Tags (${n})` : "🏷 Tags"; btn.classList.toggle("on", n > 0); }
 }
 
-function setTag(t) {
-  STATE.activeTag = STATE.activeTag === t ? null : t;
-  renderTagStrip(); renderList();
+function togglePriorityFilter() {
+  STATE.highPriorityOnly = !STATE.highPriorityOnly;
+  const pill = $("pri-pill");
+  if (pill) pill.classList.toggle("on", STATE.highPriorityOnly);
+  renderList();
 }
 
 function toggleFavFilter() {
@@ -492,28 +493,42 @@ function switchTab(el, t) {
 
 function onSearch(inp) {
   $("q-clear").style.display = inp.value ? "block" : "none";
+  // Gray-out the Priority pill while searching (filter is bypassed)
+  const pill = $("pri-pill");
+  if (pill) pill.classList.toggle("search-active", inp.value.length > 0);
   renderList();
 }
 function clearSearch() {
   $("q").value = "";
   $("q-clear").style.display = "none";
+  const pill = $("pri-pill");
+  if (pill) pill.classList.remove("search-active");
   renderList();
 }
 
 function filtered() {
-  const q = ($("q")?.value || "").toLowerCase();
+  const q        = ($("q")?.value || "").toLowerCase();
+  const searching = q.length > 0;
   let r = STATE.items.filter(i => {
     if (STATE.tab !== "all" && i.type !== STATE.tab) return false;
     if (STATE.favOnly && !i.fav) return false;
-    if (STATE.activeTag && !(i.tags||[]).includes(STATE.activeTag)) return false;
+    // Priority filter: only when NOT actively searching
+    if (!searching && STATE.highPriorityOnly && i.priority !== "high") return false;
+    // Multi-tag filter: item must match ANY selected tag
+    if (STATE.activeTags.length > 0 && !STATE.activeTags.some(t => (i.tags||[]).includes(t))) return false;
     if (!q) return true;
     return [i.title, i.username, i.url, i.note, ...(i.tags||[])].some(v => (v||"").toLowerCase().includes(q));
   });
-  if (STATE.sort === "name")   r.sort((a,b) => (a.title||"").localeCompare(b.title||""));
-  if (STATE.sort === "name-d") r.sort((a,b) => (b.title||"").localeCompare(a.title||""));
-  if (STATE.sort === "new")    r.sort((a,b) => b.created - a.created);
-  if (STATE.sort === "old")    r.sort((a,b) => a.created - b.created);
-  if (STATE.sort === "type")   r.sort((a,b) => (a.type||"").localeCompare(b.type||""));
+  // High-priority view: sort by newest first
+  if (!searching && STATE.highPriorityOnly) {
+    r.sort((a,b) => (b.created||0) - (a.created||0));
+  } else {
+    if (STATE.sort === "name")   r.sort((a,b) => (a.title||"").localeCompare(b.title||""));
+    if (STATE.sort === "name-d") r.sort((a,b) => (b.title||"").localeCompare(a.title||""));
+    if (STATE.sort === "new")    r.sort((a,b) => b.created - a.created);
+    if (STATE.sort === "old")    r.sort((a,b) => a.created - b.created);
+    if (STATE.sort === "type")   r.sort((a,b) => (a.type||"").localeCompare(b.type||""));
+  }
   return r;
 }
 
@@ -522,17 +537,20 @@ function renderList() {
   const list = filtered();
   if (!list.length) {
     const icons = { all:"🔐", password:"🔑", subscription:"💳", bookmark:"🔖", note:"📝" };
+    const hint  = (STATE.highPriorityOnly && !($("q")?.value))
+      ? "No high-priority items yet. Tap \u26a1\ufe0e Priority to see all."
+      : "Tap the + button to add your first item";
     area.innerHTML = `<div class="empty">
       <div class="empty-ico">${icons[STATE.tab]||"🔍"}</div>
       <div class="empty-title">Nothing here yet</div>
-      <div class="empty-sub">Tap the + button to add your first item</div>
+      <div class="empty-sub">${hint}</div>
     </div>`;
     return;
   }
   area.innerHTML = list.map(cardHTML).join("");
 }
 
-function renderAll() { renderList(); renderTagStrip(); }
+function renderAll() { renderList(); updateTagPill(); }
 
 function cardHTML(item) {
   const ico  = T_ICON[item.type]  || "📄";
@@ -540,6 +558,7 @@ function cardHTML(item) {
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
   const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
   const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
+  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
@@ -550,7 +569,7 @@ function cardHTML(item) {
         <div class="ct">${esc(item.title||"Untitled")}</div>
         <div class="cs">${esc(sub)}</div>
       </div>
-      <div class="cbadges">${fav}${tags}</div>
+      <div class="cbadges">${pri}${fav}${tags}</div>
       <div class="chev">⌄</div>
     </div>
     ${exp ? `
@@ -558,6 +577,7 @@ function cardHTML(item) {
     <div class="card-actions">${actionsHTML(item)}</div>` : ""}
   </div>`;
 }
+
 
 function detailHTML(item) {
   const id = item.id;
@@ -667,9 +687,10 @@ async function toggleFav(id) {
 //  ADD / EDIT FORM
 // ══════════════════════════════════════════════════════════
 function openAdd() {
-  STATE.editId = null;
-  STATE.mTags  = [];
-  STATE.mType  = "password";
+  STATE.editId    = null;
+  STATE.mTags     = [];
+  STATE.mType     = "password";
+  STATE.mPriority = "high";
   $("add-title").textContent = "Add Item";
   buildForm("password", null);
   openOverlay("add-overlay");
@@ -678,9 +699,10 @@ function openAdd() {
 function openEdit(id) {
   const item = STATE.items.find(i => i.id === id);
   if (!item) return;
-  STATE.editId = id;
-  STATE.mTags  = [...(item.tags||[])];
-  STATE.mType  = item.type;
+  STATE.editId    = id;
+  STATE.mTags     = [...(item.tags||[])];
+  STATE.mType     = item.type;
+  STATE.mPriority = item.priority || "normal";
   $("add-title").textContent = "Edit Item";
   buildForm(item.type, item);
   openOverlay("add-overlay");
@@ -737,6 +759,15 @@ function buildForm(type, pre) {
       <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
   }
 
+  const priorityBlock = `
+    <div class="fg">
+      <div class="fl">Priority</div>
+      <div class="pri-row">
+        <div class="pricard hi${STATE.mPriority==="high"?" on":""}" onclick="selectPri('high',this)"><span class="prico">⚡</span>High</div>
+        <div class="pricard${STATE.mPriority==="normal"?" on":""}" onclick="selectPri('normal',this)"><span class="prico">○</span>Normal</div>
+      </div>
+    </div>`;
+
   const tagsBlock = `
     <div class="fg">
       <div class="fl">Tags</div>
@@ -747,7 +778,7 @@ function buildForm(type, pre) {
       <div class="chips" id="mchips">${renderChips()}</div>
     </div>`;
 
-  body.innerHTML = typeGrid + fields + tagsBlock;
+  body.innerHTML = typeGrid + fields + priorityBlock + tagsBlock;
   foot.innerHTML = `
     <button class="btn ghost" onclick="closeOverlay('add-overlay')">Cancel</button>
     <button class="btn primary" onclick="submitItem()">${STATE.editId?"Save Changes":"Add Item"}</button>`;
@@ -756,6 +787,12 @@ function buildForm(type, pre) {
     $("f-password")?.addEventListener("input", updateStrength);
     updateStrength();
   }
+}
+
+function selectPri(val, el) {
+  STATE.mPriority = val;
+  document.querySelectorAll(".pricard").forEach(c => c.classList.remove("on"));
+  el.classList.add("on");
 }
 
 function switchType(type, el) {
@@ -819,6 +856,7 @@ async function submitItem() {
     price    : fv("f-price"),
     renewal  : fv("f-renewal"),
     tags     : [...STATE.mTags],
+    priority : STATE.mPriority || "normal",
   };
   await saveItem(item);
   closeOverlay("add-overlay");
@@ -974,8 +1012,8 @@ function showPage(p) {
   ["statusbar","tabs","search-row","list"].forEach(id => {
     const el = $(id); if (el) el.style.display = id==="list" ? (home?"flex":"none") : (home?"":"none");
   });
-  const ts = $("tag-strip");
-  if (ts) ts.style.display = (home && getAllTags().length) ? "flex" : "none";
+  const fb = $("filter-bar");
+  if (fb) fb.style.display = home ? "flex" : "none";
   $("drive-banner").style.display = (home && !STATE.drive.token && !LS.get("drive_banner_dismissed")) ? "flex" : "none";
   $("settings").classList.toggle("show", !home);
   $("fab").style.display = home ? "flex" : "none";
@@ -1010,6 +1048,54 @@ function toast(msg) {
   t.classList.add("show");
   clearTimeout(_tt);
   _tt = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+// ══════════════════════════════════════════════════════════
+//  TAG FILTER SHEET
+// ══════════════════════════════════════════════════════════
+function openTagSheet() {
+  const inp = $("tag-sheet-q");
+  if (inp) inp.value = "";
+  renderTagSheet();
+  openOverlay("tag-overlay");
+}
+
+function renderTagSheet() {
+  const q       = ($("tag-sheet-q")?.value || "").toLowerCase();
+  const allTags = getAllTags();
+  const visible = q ? allTags.filter(t => t.toLowerCase().includes(q)) : allTags;
+  const list    = $("tag-sheet-list");
+  if (!list) return;
+  if (!visible.length) {
+    list.innerHTML = `<div class="tag-sheet-empty">No tags found</div>`;
+    return;
+  }
+  list.innerHTML = visible.map(t => {
+    const count   = STATE.items.filter(i => (i.tags||[]).includes(t)).length;
+    const checked = STATE.activeTags.includes(t);
+    return `<label class="tag-cb-row">
+      <input type="checkbox" class="tag-cb" ${checked ? "checked" : ""}
+             onchange="toggleTagSel('${esc(t)}',this.checked)">
+      <span class="tag-cb-label">#${esc(t)}</span>
+      <span class="tag-cb-count">${count}</span>
+    </label>`;
+  }).join("");
+}
+
+function toggleTagSel(tag, checked) {
+  if (checked && !STATE.activeTags.includes(tag)) STATE.activeTags.push(tag);
+  if (!checked) STATE.activeTags = STATE.activeTags.filter(t => t !== tag);
+}
+
+function clearTagFilter() {
+  STATE.activeTags = [];
+  renderTagSheet();
+}
+
+function applyTagFilter() {
+  closeOverlay("tag-overlay");
+  updateTagPill();
+  renderList();
 }
 
 // ══════════════════════════════════════════════════════════

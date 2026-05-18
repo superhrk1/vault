@@ -416,7 +416,11 @@ function connectDrive() {
     toast("Add your Client ID to config.js first — see SETUP.md");
     return;
   }
-  const redirectUri = location.origin + location.pathname;
+  // Normalize redirect URI: strip index.html, ensure trailing slash
+  let redirectUri = location.origin + location.pathname;
+  redirectUri = redirectUri.replace(/\/index\.html$/, "/");
+  if (!redirectUri.endsWith("/")) redirectUri += "/";
+  console.log("OAuth redirect_uri:", redirectUri);
   const params = new URLSearchParams({
     client_id    : clientId,
     redirect_uri : redirectUri,

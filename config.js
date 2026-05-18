@@ -12,8 +12,8 @@ const VAULT_CONFIG = {
   GOOGLE_CLIENT_ID: "827701204225-9pbisp76bd28kv9snre7ol03aj4ni5np.apps.googleusercontent.com",
 
   // ── Advanced settings (leave as-is unless you know what you're doing) ──
-  DRIVE_FILE_NAME:  "vault-encrypted-backup.json",   // filename stored in your Drive
-  DRIVE_SCOPE:      "https://www.googleapis.com/auth/drive.file",
+  DRIVE_FILE_NAME: "vault-encrypted-backup.json",   // filename stored in your Drive
+  DRIVE_SCOPE: "https://www.googleapis.com/auth/drive.file",
   PBKDF2_ITERATIONS: 310000,                          // key derivation strength
-  APP_NAME:         "Vault",
+  APP_NAME: "Vault",
 };

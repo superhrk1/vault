@@ -1,12 +1,12 @@
-/* ═══════════════════════════════════════════════════════════
-   VAULT — app.js
-   AES-256-GCM encryption · PBKDF2 key derivation
-   Google Drive OAuth2 sync · Full offline PWA
-   ═══════════════════════════════════════════════════════════ */
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   VAULT â€” app.js
+   AES-256-GCM encryption Â· PBKDF2 key derivation
+   Google Drive OAuth2 sync Â· Full offline PWA
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 "use strict";
 
-// ── Shortcuts ─────────────────────────────────────────────
+// â”€â”€ Shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const $ = id => document.getElementById(id);
 const enc = s  => new TextEncoder().encode(s);
 const dec = b  => new TextDecoder().decode(b);
@@ -16,16 +16,16 @@ const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── LS wrapper ────────────────────────────────────────────
+// â”€â”€ LS wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const LS = {
   get : k  => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set : (k,v) => localStorage.setItem(k, JSON.stringify(v)),
   del : k  => localStorage.removeItem(k),
 };
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CRYPTO  (AES-256-GCM + PBKDF2)
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const Crypto = {
   async deriveKey(password, salt) {
     const ITERS = VAULT_CONFIG.PBKDF2_ITERATIONS || 310000;
@@ -59,9 +59,9 @@ const Crypto = {
   },
 };
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  STATE
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let STATE = {
   masterKey        : null,
   items            : [],
@@ -84,9 +84,9 @@ let STATE = {
   }
 };
 
-// ══════════════════════════════════════════════════════════
-//  STORAGE  — only encrypted blobs ever hit localStorage
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  STORAGE  â€” only encrypted blobs ever hit localStorage
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function persistItems() {
   if (!STATE.masterKey) return;
   if (!STATE.items.length) { LS.del("vault_data"); return; }
@@ -101,9 +101,9 @@ async function loadItems() {
   catch { STATE.items = []; }
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  BOOT
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function boot() {
   // Register SW
   if ("serviceWorker" in navigator) {
@@ -134,9 +134,9 @@ async function boot() {
   renderSyncBadge();
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  LOCK / UNLOCK
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function handleLock() {
   const pw = $("lock-inp").value;
   setLockErr("");
@@ -145,7 +145,7 @@ async function handleLock() {
   if (!hasVault) { await setupVault(pw); return; }
   const hash = await Crypto.hashPassword(pw);
   if (hash !== LS.get("vault_hash")) {
-    setLockErr("Wrong password ❌");
+    setLockErr("Wrong password âŒ");
     $("lock-inp").classList.add("shake");
     setTimeout(() => $("lock-inp").classList.remove("shake"), 500);
     return;
@@ -175,7 +175,7 @@ function openApp() {
     $("drive-banner").classList.add("show");
     $("db-msg").textContent = configured
       ? "Connect Google Drive to sync your vault across devices"
-      : "⚙️ Add your Google Client ID in config.js to enable Drive sync";
+      : "âš™ï¸ Add your Google Client ID in config.js to enable Drive sync";
   }
 }
 
@@ -195,9 +195,9 @@ function toggleLockEye() {
   inp.type = inp.type === "password" ? "text" : "password";
 }
 
-// ══════════════════════════════════════════════════════════
-//  GOOGLE DRIVE — OAuth2 implicit flow
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  GOOGLE DRIVE â€” OAuth2 implicit flow
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function handleOAuthCallback() {
   const hash = location.hash;
   if (!hash.includes("access_token")) return;
@@ -213,7 +213,7 @@ function handleOAuthCallback() {
 function connectDrive() {
   const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
   if (!clientId || clientId.startsWith("PASTE_")) {
-    toast("Add your Client ID to config.js first — see SETUP.md");
+    toast("Add your Client ID to config.js first â€” see SETUP.md");
     return;
   }
   const redirectUri = location.origin + location.pathname;
@@ -243,7 +243,7 @@ function connectDrive() {
         STATE.drive.token  = p.get("access_token");
         LS.set("drive_token", STATE.drive.token);
         popup.close();
-        toast("Google Drive connected ✓");
+        toast("Google Drive connected âœ“");
         renderDrivePanel();
         renderSyncBadge();
         triggerSync();
@@ -294,11 +294,11 @@ async function triggerSync() {
     STATE.drive.lastSync = now;
     LS.set("drive_last_sync", now);
     setSyncStatus("synced");
-    toast("Synced to Drive ✓");
+    toast("Synced to Drive âœ“");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
-    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect");
+    if (e.message === "SESSION_EXPIRED") toast("Drive session expired â€” reconnect");
     else toast("Sync failed: " + e.message);
   }
 }
@@ -372,11 +372,11 @@ async function pullFromDrive() {
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
-    toast(`Pulled ${added} new items from Drive ✓`);
+    toast(`Pulled ${added} new items from Drive âœ“`);
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
-    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect");
+    if (e.message === "SESSION_EXPIRED") toast("Drive session expired â€” reconnect");
     else toast("Pull failed: " + e.message);
   }
 }
@@ -391,7 +391,7 @@ function renderSyncBadge() {
   const label = $("sync-label");
   const s = STATE.drive.status;
   badge.className = "sync-badge " + s;
-  const map = { offline:"Local", syncing:"Syncing…", synced:"Drive ✓", error:"Sync Error", noconfig:"No Drive" };
+  const map = { offline:"Local", syncing:"Syncingâ€¦", synced:"Drive âœ“", error:"Sync Error", noconfig:"No Drive" };
   label.textContent = map[s] || s;
 }
 
@@ -403,21 +403,21 @@ function renderDrivePanel() {
   const syncTime   = lastSync ? new Date(lastSync).toLocaleString() : "Never";
 
   if (!configured) {
-    panel.innerHTML = driveRow("⚙️","Not configured","Add your Client ID to config.js — see SETUP.md","","");
+    panel.innerHTML = driveRow("âš™ï¸","Not configured","Add your Client ID to config.js â€” see SETUP.md","","");
     return;
   }
 
   if (token) {
     panel.innerHTML =
-      driveRow("☁️","Google Drive","Connected · Last sync: "+syncTime,
+      driveRow("â˜ï¸","Google Drive","Connected Â· Last sync: "+syncTime,
         `<span class="dr-act sync" onclick="triggerSync()">Sync Now</span>`) +
-      driveRow("⬇️","Pull from Drive","Merge cloud backup into local vault",
+      driveRow("â¬‡ï¸","Pull from Drive","Merge cloud backup into local vault",
         `<span class="dr-act pull" onclick="pullFromDrive()">Pull</span>`) +
-      driveRow("🔌","Disconnect","Remove Drive access",
+      driveRow("ðŸ”Œ","Disconnect","Remove Drive access",
         `<span class="dr-act disc" onclick="disconnectDrive()">Remove</span>`);
   } else {
     panel.innerHTML =
-      driveRow("☁️","Google Drive","Not connected · Sync vault across devices",
+      driveRow("â˜ï¸","Google Drive","Not connected Â· Sync vault across devices",
         `<span class="dr-act connect" onclick="connectDrive()">Connect</span>`);
   }
 }
@@ -430,9 +430,9 @@ function driveRow(ico, name, sub, action="") {
   </div>`;
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ITEMS
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -451,10 +451,10 @@ async function removeItem(id) {
   renderAll(); updateStats();
 }
 
-// ══════════════════════════════════════════════════════════
-//  RENDER — LIST
-// ══════════════════════════════════════════════════════════
-const T_ICON  = { password:"🔑", bookmark:"🔖", note:"📝", subscription:"💳" };
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  RENDER â€” LIST
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+const T_ICON  = { password:"ðŸ”‘", bookmark:"ðŸ”–", note:"ðŸ“", subscription:"ðŸ’³" };
 const T_CLASS = { password:"ip", bookmark:"ib", note:"in", subscription:"is" };
 
 function getAllTags() {
@@ -529,39 +529,28 @@ function renderList() {
   const area = $("list");
   const list = filtered();
   if (!list.length) {
-    const icons = { all:"🔐", password:"🔑", subscription:"💳", bookmark:"🔖", note:"📝" };
+    const icons = { all:"ðŸ”", password:"ðŸ”‘", subscription:"ðŸ’³", bookmark:"ðŸ”–", note:"ðŸ“" };
     const hint = STATE.activeTags.length
       ? "No items match the selected tags."
       : "Tap + to add your first item";
     area.innerHTML = `<div class="empty">
-      <div class="empty-ico">${icons[STATE.tab]||"🔍"}</div>
+      <div class="empty-ico">${icons[STATE.tab]||"ðŸ”"}</div>
       <div class="empty-title">Nothing here yet</div>
       <div class="empty-sub">${hint}</div>
     </div>`;
     return;
   }
-"q")?.value))
-      ? "No high-priority items yet. Tap \u26a1\ufe0e Priority to see all."
-      : "Tap the + button to add your first item";
-    area.innerHTML = `<div class="empty">
-      <div class="empty-ico">${icons[STATE.tab]||"🔍"}</div>
-      <div class="empty-title">Nothing here yet</div>
-      <div class="empty-sub">${hint}</div>
-    </div>`;
-    return;
-  }
-  area.innerHTML = list.map(cardHTML).join("");
 }
 
 function renderAll() { renderList(); renderSelectedTags(); }
 
 function cardHTML(item) {
-  const ico  = T_ICON[item.type]  || "📄";
+  const ico  = T_ICON[item.type]  || "ðŸ“„";
   const cls  = T_CLASS[item.type] || "ip";
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
   const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
-  const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
-  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
+  const fav  = item.fav ? `<span class="bpill bf">â˜…</span>` : "";
+  const pri  = item.priority === "high" ? `<span class="bpill bpp">âš¡</span>` : "";
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
@@ -573,7 +562,7 @@ function cardHTML(item) {
         <div class="cs">${esc(sub)}</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
-      <div class="chev">⌄</div>
+      <div class="chev">âŒ„</div>
     </div>
     ${exp ? `
     <div class="card-detail">${detailHTML(item)}</div>
@@ -586,11 +575,11 @@ function getFlagBadge(item) {
   if (!fd) return "";
   const days = Math.ceil((new Date(fd).getTime() - Date.now()) / 86400000);
   let cls, ico, label;
-  if (days < 0)        { cls="expired"; ico="⛔";  label=`${Math.abs(days)}d ago`; }
-  else if (days === 0) { cls="urgent";  ico="⚠️"; label="Today"; }
-  else if (days <= 3)  { cls="urgent";  ico="⚠️"; label=`${days}d left`; }
-  else if (days <= 14) { cls="soon";    ico="📅"; label=`${days}d left`; }
-  else                 { cls="ok";      ico="📅"; label=new Date(fd).toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+  if (days < 0)        { cls="expired"; ico="â›”";  label=`${Math.abs(days)}d ago`; }
+  else if (days === 0) { cls="urgent";  ico="âš ï¸"; label="Today"; }
+  else if (days <= 3)  { cls="urgent";  ico="âš ï¸"; label=`${days}d left`; }
+  else if (days <= 14) { cls="soon";    ico="ðŸ“…"; label=`${days}d left`; }
+  else                 { cls="ok";      ico="ðŸ“…"; label=new Date(fd).toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
   return `<span class="flag-badge ${cls}">${ico} ${label}</span>`;
 }
 
@@ -605,9 +594,9 @@ function detailHTML(item) {
     const vis = STATE.pwVisible[id];
     h += `<div class="dr">
       <span class="dl">PASS</span>
-      <span class="dv${vis?"":" masked"}" id="dv-pw-${id}">${vis ? esc(item.password) : "••••••••••"}</span>
-      <span class="da" onclick="togglePwVis('${id}')" id="eye-${id}">${vis?"🙈":"👁"}</span>
-      <span class="da" onclick="copyVal('${id}','password')" title="Copy">⎘</span>
+      <span class="dv${vis?"":" masked"}" id="dv-pw-${id}">${vis ? esc(item.password) : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}</span>
+      <span class="da" onclick="togglePwVis('${id}')" id="eye-${id}">${vis?"ðŸ™ˆ":"ðŸ‘"}</span>
+      <span class="da" onclick="copyVal('${id}','password')" title="Copy">âŽ˜</span>
     </div>`;
   }
 
@@ -618,9 +607,9 @@ function detailHTML(item) {
   if (item.renewal) {
     const days = Math.ceil((new Date(item.renewal) - new Date()) / 86400000);
     const cls  = days < 0 ? "exp" : days < 30 ? "warn" : "ok";
-    const ico  = days < 0 ? "❌"  : days < 30 ? "⚠️"   : "✅";
+    const ico  = days < 0 ? "âŒ"  : days < 30 ? "âš ï¸"   : "âœ…";
     const msg  = days < 0 ? `Expired ${Math.abs(days)}d ago` : days === 0 ? "Expires today" : `${days}d left`;
-    h += `<div class="renewal ${cls}">${ico} Renews ${esc(item.renewal)} · ${msg}</div>`;
+    h += `<div class="renewal ${cls}">${ico} Renews ${esc(item.renewal)} Â· ${msg}</div>`;
   }
 
   if (item.note) h += `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>`;
@@ -636,7 +625,7 @@ function dRow(label, val, copyFn="") {
   return `<div class="dr">
     <span class="dl">${label}</span>
     <span class="dv">${val}</span>
-    ${copyFn ? `<span class="da" onclick="${copyFn}" title="Copy">⎘</span>` : ""}
+    ${copyFn ? `<span class="da" onclick="${copyFn}" title="Copy">âŽ˜</span>` : ""}
   </div>`;
 }
 
@@ -644,13 +633,13 @@ function actionsHTML(item) {
   const id = item.id;
   let b = "";
   if (item.type==="password" || item.type==="subscription") {
-    b += cab("👤","User","ca-copy", `copyVal('${id}','username')`);
-    b += cab("🔑","Pass","ca-copy", `copyVal('${id}','password')`);
+    b += cab("ðŸ‘¤","User","ca-copy", `copyVal('${id}','username')`);
+    b += cab("ðŸ”‘","Pass","ca-copy", `copyVal('${id}','password')`);
   }
-  if (item.url) b += cab("🌐","Open","ca-link", `openLink('${id}')`);
-  b += cab(item.fav?"★":"☆","Fav", "ca-fav",  `toggleFav('${id}')`);
-  b += cab("✏️","Edit","ca-edit", `openEdit('${id}')`);
-  b += cab("🗑","Delete","ca-del", `askDelete('${id}')`);
+  if (item.url) b += cab("ðŸŒ","Open","ca-link", `openLink('${id}')`);
+  b += cab(item.fav?"â˜…":"â˜†","Fav", "ca-fav",  `toggleFav('${id}')`);
+  b += cab("âœï¸","Edit","ca-edit", `openEdit('${id}')`);
+  b += cab("ðŸ—‘","Delete","ca-del", `askDelete('${id}')`);
   return b;
 }
 
@@ -677,11 +666,11 @@ async function copyVal(id, field) {
   const item = STATE.items.find(i => i.id === id);
   if (!item) return;
   await copyText(item[field] || "");
-  toast(`${field==="password"?"Password":"Username"} copied ✓`);
+  toast(`${field==="password"?"Password":"Username"} copied âœ“`);
 }
 
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast("Copied ✓"); }
+  try { await navigator.clipboard.writeText(text); toast("Copied âœ“"); }
   catch { toast("Copy not available"); }
 }
 
@@ -696,12 +685,12 @@ async function toggleFav(id) {
   item.fav = !item.fav;
   await saveItem(item);
   renderList();
-  toast(item.fav ? "Added to favorites ★" : "Removed from favorites");
+  toast(item.fav ? "Added to favorites â˜…" : "Removed from favorites");
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ADD / EDIT FORM
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function openAdd() {
   STATE.editId    = null;
   STATE.mTags     = [];
@@ -733,32 +722,32 @@ function buildForm(type, pre) {
     <div class="fg">
       <div class="fl">Type</div>
       <div class="type-grid">
-        <div class="tcard${type==="password"?" on":""}" onclick="switchType('password',this)"><span class="tci">🔑</span>Password</div>
-        <div class="tcard${type==="subscription"?" on":""}" onclick="switchType('subscription',this)"><span class="tci">💳</span>Subscription</div>
-        <div class="tcard${type==="bookmark"?" on":""}" onclick="switchType('bookmark',this)"><span class="tci">🔖</span>Bookmark</div>
-        <div class="tcard${type==="note"?" on":""}" onclick="switchType('note',this)"><span class="tci">📝</span>Note</div>
+        <div class="tcard${type==="password"?" on":""}" onclick="switchType('password',this)"><span class="tci">ðŸ”‘</span>Password</div>
+        <div class="tcard${type==="subscription"?" on":""}" onclick="switchType('subscription',this)"><span class="tci">ðŸ’³</span>Subscription</div>
+        <div class="tcard${type==="bookmark"?" on":""}" onclick="switchType('bookmark',this)"><span class="tci">ðŸ”–</span>Bookmark</div>
+        <div class="tcard${type==="note"?" on":""}" onclick="switchType('note',this)"><span class="tci">ðŸ“</span>Note</div>
       </div>
     </div><div class="divider"></div>`;
 
   let fields = "";
   if (type === "password") {
     fields = `
-      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Gmail, Netflix…" value="${esc(pre?.title||"")}" autocomplete="off"></div>
+      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Gmail, Netflixâ€¦" value="${esc(pre?.title||"")}" autocomplete="off"></div>
       <div class="fg"><div class="fl">Username / Email</div><input class="fi" id="f-username" placeholder="user@example.com" value="${esc(pre?.username||"")}" autocomplete="off"></div>
       <div class="fg"><div class="fl">Password</div>
-        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password">
-        <span class="pweye" onclick="tpw('f-password')">👁</span></div>
+        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value="${esc(pre?.password||"")}" autocomplete="new-password">
+        <span class="pweye" onclick="tpw('f-password')">ðŸ‘</span></div>
         <div class="str-bar"><div class="str-fill" id="str-fill"></div></div>
       </div>
       <div class="fg"><div class="fl">Website URL</div><input class="fi" id="f-url" type="url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
-      <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
+      <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notesâ€¦">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "subscription") {
     fields = `
-      <div class="fg"><div class="fl">Service Name *</div><input class="fi" id="f-title" placeholder="Netflix, Spotify…" value="${esc(pre?.title||"")}"></div>
+      <div class="fg"><div class="fl">Service Name *</div><input class="fi" id="f-title" placeholder="Netflix, Spotifyâ€¦" value="${esc(pre?.title||"")}"></div>
       <div class="fg"><div class="fl">Email / Username</div><input class="fi" id="f-username" placeholder="account email" value="${esc(pre?.username||"")}"></div>
       <div class="fg"><div class="fl">Password</div>
-        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password">
-        <span class="pweye" onclick="tpw('f-password')">👁</span></div>
+        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value="${esc(pre?.password||"")}" autocomplete="new-password">
+        <span class="pweye" onclick="tpw('f-password')">ðŸ‘</span></div>
       </div>
       <div class="fg"><div class="fl">Price</div><input class="fi" id="f-price" placeholder="$9.99/month" value="${esc(pre?.price||"")}"></div>
       <div class="fg"><div class="fl">Renewal Date</div><input class="fi" id="f-renewal" type="date" value="${esc(pre?.renewal||"")}"></div>
@@ -772,15 +761,15 @@ function buildForm(type, pre) {
   } else if (type === "note") {
     fields = `
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Note title" value="${esc(pre?.title||"")}"></div>
-      <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
+      <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your noteâ€¦">${esc(pre?.note||"")}</textarea></div>`;
   }
 
   const priorityBlock = `
     <div class="fg">
       <div class="fl">Priority</div>
       <div class="pri-row">
-        <div class="pricard hi${STATE.mPriority==="high"?" on":""}" onclick="selectPri('high',this)"><span class="prico">⚡</span>High</div>
-        <div class="pricard${STATE.mPriority==="normal"?" on":""}" onclick="selectPri('normal',this)"><span class="prico">○</span>Normal</div>
+        <div class="pricard hi${STATE.mPriority==="high"?" on":""}" onclick="selectPri('high',this)"><span class="prico">âš¡</span>High</div>
+        <div class="pricard${STATE.mPriority==="normal"?" on":""}" onclick="selectPri('normal',this)"><span class="prico">â—‹</span>Normal</div>
       </div>
     </div>`;
 
@@ -788,14 +777,14 @@ function buildForm(type, pre) {
     <div class="fg">
       <div class="fl">Flag / Expires</div>
       <input class="fi" id="f-flagDate" type="date" value="${esc(pre?.flagDate||"")}" style="color-scheme:dark">
-      <div style="font-size:11px;color:var(--faint);margin-top:3px">Optional — item will show an expiry countdown on cards</div>
+      <div style="font-size:11px;color:var(--faint);margin-top:3px">Optional â€” item will show an expiry countdown on cards</div>
     </div>`;
 
   const tagsBlock = `
     <div class="fg">
       <div class="fl">Tags</div>
       <div class="tag-add-row">
-        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag()}">
+        <input class="fi" id="tag-inp" placeholder="Add a tagâ€¦" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag()}">
         <button class="tadd-btn" onclick="addTag()">+ Add</button>
       </div>
       <div class="chips" id="mchips">${renderChips()}</div>
@@ -854,7 +843,7 @@ function addTag() {
 function removeTag(t) { STATE.mTags = STATE.mTags.filter(v => v !== t); refreshChips(); }
 function renderChips() {
   return STATE.mTags.map(t =>
-    `<div class="chip">#${esc(t)}<span class="chip-x" onclick="removeTag('${esc(t)}')">✕</span></div>`
+    `<div class="chip">#${esc(t)}<span class="chip-x" onclick="removeTag('${esc(t)}')">âœ•</span></div>`
   ).join("");
 }
 function refreshChips() { const el = $("mchips"); if (el) el.innerHTML = renderChips(); }
@@ -885,12 +874,12 @@ async function submitItem() {
   await saveItem(item);
   closeOverlay("add-overlay");
   renderAll(); updateStats();
-  toast(STATE.editId ? "Item updated ✓" : "Item added ✓");
+  toast(STATE.editId ? "Item updated âœ“" : "Item added âœ“");
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  DELETE
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function askDelete(id) {
   const item = STATE.items.find(i => i.id === id);
   if (!item) return;
@@ -905,14 +894,14 @@ function askDelete(id) {
   openOverlay("confirm-overlay");
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  IMPORT / EXPORT
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function exportJSON() {
   const encrypted = await Crypto.encrypt(STATE.items, STATE.masterKey);
   const payload   = JSON.stringify({ version:2, app:"vault-pwa", exported:new Date().toISOString(), vault:encrypted });
   dl("vault-backup.enc.json", payload, "application/json");
-  toast("Vault exported ✓");
+  toast("Vault exported âœ“");
 }
 
 function exportCSV() {
@@ -949,13 +938,13 @@ async function doImport(e) {
     await persistItems();
     if (STATE.drive.token) triggerSync();
     renderAll(); updateStats();
-    toast(`Imported ${added} items ✓`);
+    toast(`Imported ${added} items âœ“`);
   } catch (err) { toast("Import failed: " + err.message); }
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  SETTINGS
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function updateStats() {
   const grid = $("stat-grid");
   if (!grid) return;
@@ -963,12 +952,12 @@ function updateStats() {
   STATE.items.forEach(i => { if (c[i.type] !== undefined) c[i.type]++; });
   const favCount = STATE.items.filter(i => i.fav).length;
   grid.innerHTML = [
-    [STATE.items.length, "Total Items", "🗄️"],
-    [favCount,           "Favorites",   "★"],
-    [c.password,         "Passwords",   "🔑"],
-    [c.subscription,     "Subscriptions","💳"],
-    [c.bookmark,         "Bookmarks",   "🔖"],
-    [c.note,             "Notes",       "📝"],
+    [STATE.items.length, "Total Items", "ðŸ—„ï¸"],
+    [favCount,           "Favorites",   "â˜…"],
+    [c.password,         "Passwords",   "ðŸ”‘"],
+    [c.subscription,     "Subscriptions","ðŸ’³"],
+    [c.bookmark,         "Bookmarks",   "ðŸ”–"],
+    [c.note,             "Notes",       "ðŸ“"],
   ].map(([n,l,i]) => `<div class="stat-box"><div class="stat-n">${n}</div><div class="stat-l">${i} ${l}</div></div>`).join("");
 }
 
@@ -980,12 +969,12 @@ async function changeMasterPw() {
   LS.set("vault_hash", await Crypto.hashPassword(nw));
   $("new-pw").value = "";
   if (STATE.drive.token) triggerSync();
-  toast("Master password updated ✓");
+  toast("Master password updated âœ“");
 }
 
 function clearAll() {
   $("confirm-title").textContent = "Wipe All Data";
-  $("confirm-msg").textContent   = "This permanently deletes your ENTIRE vault — all passwords, bookmarks, and notes. This CANNOT be undone.";
+  $("confirm-msg").textContent   = "This permanently deletes your ENTIRE vault â€” all passwords, bookmarks, and notes. This CANNOT be undone.";
   $("confirm-ok").textContent    = "Wipe Everything";
   $("confirm-ok").onclick = () => {
     localStorage.clear();
@@ -1005,7 +994,7 @@ function setSort(val, el) {
   toast("Sort updated");
 }
 
-// ── Password generator ─────────────────────────────────
+// â”€â”€ Password generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function genPassword() {
   let ch = "";
   if (STATE.genOpts.upper) ch += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -1021,16 +1010,16 @@ function genPassword() {
 function copyGenPw() {
   const pw = $("gen-out").textContent;
   if (pw === "Tap Generate") { toast("Generate first"); return; }
-  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓"));
+  navigator.clipboard.writeText(pw).then(() => toast("Password copied âœ“"));
 }
 function genToggle(k, el) {
   STATE.genOpts[k] = !STATE.genOpts[k];
   el.classList.toggle("on", STATE.genOpts[k]);
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  PAGE NAV
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function showPage(p) {
   const home = p === "home";
   ["statusbar","tabs","search-row","list"].forEach(id => {
@@ -1051,9 +1040,9 @@ function dismissBanner() {
   LS.set("drive_banner_dismissed","1");
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  OVERLAYS
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function openOverlay(id)  { $(id).classList.add("open"); }
 function closeOverlay(id) { $(id).classList.remove("open"); }
 document.addEventListener("DOMContentLoaded", () => {
@@ -1062,9 +1051,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TOAST
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let _tt;
 function toast(msg) {
   const t = $("toast");
@@ -1074,9 +1063,9 @@ function toast(msg) {
   _tt = setTimeout(() => t.classList.remove("show"), 2600);
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TAG AUTOCOMPLETE (inline)
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function onTagSearch(inp) {
   const q = inp.value.trim();
   $("tag-q-clear").style.display = q ? "block" : "none";
@@ -1129,7 +1118,7 @@ function renderSelectedTags() {
   const n = STATE.activeTags.length;
   el.style.display = n ? "flex" : "none";
   el.innerHTML = STATE.activeTags.map(t =>
-    `<span class="stag">#${esc(t)}<span class="stag-x" onclick="removeActiveTag('${esc(t)}')">✕</span></span>`
+    `<span class="stag">#${esc(t)}<span class="stag-x" onclick="removeActiveTag('${esc(t)}')">âœ•</span></span>`
   ).join("") + (n > 1 ? `<span class="stag-clear" onclick="clearAllTags()">Clear all</span>` : "");
 }
 
@@ -1140,7 +1129,7 @@ function clearTagSearch() {
   $("tag-autocomplete").style.display = "none";
 }
 
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  START
-// ══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 boot();

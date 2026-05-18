@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    VAULT â€” app.js
    AES-256-GCM encryption Â· PBKDF2 key derivation
    Google Drive OAuth2 sync Â· Full offline PWA
@@ -114,8 +114,8 @@ async function boot() {
   handleOAuthCallback();
 
   // Restore drive state
-  STATE.drive.token  = LS.get("drive_token");
-  STATE.drive.fileId = LS.get("drive_file_id");
+  STATE.drive.token    = LS.get("drive_token");
+  STATE.drive.fileId   = LS.get("drive_file_id");
   STATE.drive.lastSync = LS.get("drive_last_sync");
 
   // Detect if Client ID is configured
@@ -123,44 +123,117 @@ async function boot() {
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   STATE.drive.status = configured ? (STATE.drive.token ? "synced" : "offline") : "noconfig";
 
-  // Show vault exists or first-run
+  // First-run vs unlock
   const hasVault = !!LS.get("vault_hash");
   if (!hasVault) {
-    $("lock-hint").textContent = "First time? Set your master password below.";
-    $("lock-setup-btn").style.display = "block";
-    $("lock-main-btn").textContent = "Create Vault";
+    $("pin-label").textContent = "Create a PIN";
+    $("lock-hint").textContent = "Choose a numeric PIN (min 4 digits)";
   }
-  $("lock-inp").addEventListener("keydown", e => { if (e.key === "Enter") handleLock(); });
+
+  renderPinDots();
   renderSyncBadge();
+  checkLockout(); // re-apply lockout if page refreshed while locked
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  LOCK / UNLOCK
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-async function handleLock() {
-  const pw = $("lock-inp").value;
+// ═══════════════════════════════════════════════════════════
+//  PIN PAD / LOCK / UNLOCK
+// ═══════════════════════════════════════════════════════════
+let _pin = "";
+let _pinConfirm = null;
+let _lockoutTimer = null;
+
+function numpadPress(digit) {
+  if (_pin.length >= 12) return;
+  _pin += digit;
+  renderPinDots();
+  const btn = $("nk-submit");
+  if (btn) btn.classList.toggle("dim", _pin.length < 4);
+}
+
+function numpadBack() {
+  if (!_pin.length) return;
+  _pin = _pin.slice(0, -1);
+  renderPinDots();
+  const btn = $("nk-submit");
+  if (btn) btn.classList.toggle("dim", _pin.length < 4);
+}
+
+function renderPinDots() {
+  const el = $("pin-dots");
+  if (!el) return;
+  const len = _pin.length;
+  let html = "";
+  if (len < 4) {
+    for (let i = 0; i < 4; i++) {
+      html += `<div class="pin-dot${i < len ? " filled" : ""}${i === len ? " cursor" : ""}"></div>`;
+    }
+  } else {
+    for (let i = 0; i < len; i++) {
+      html += `<div class="pin-dot filled"></div>`;
+    }
+    if (len < 12) html += `<div class="pin-dot cursor"></div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function handlePinSubmit() {
+  if (_pin.length < 4) return;
   setLockErr("");
-  if (!pw) { setLockErr("Enter your password"); return; }
   const hasVault = !!LS.get("vault_hash");
-  if (!hasVault) { await setupVault(pw); return; }
-  const hash = await Crypto.hashPassword(pw);
-  if (hash !== LS.get("vault_hash")) {
-    setLockErr("Wrong password âŒ");
-    $("lock-inp").classList.add("shake");
-    setTimeout(() => $("lock-inp").classList.remove("shake"), 500);
+
+  if (!hasVault) {
+    if (_pinConfirm === null) {
+      _pinConfirm = _pin;
+      _pin = "";
+      $("pin-label").textContent = "Confirm your PIN";
+      $("lock-hint").textContent = "Re-enter the same PIN to confirm";
+      renderPinDots();
+      $("nk-submit").classList.add("dim");
+      return;
+    }
+    if (_pin !== _pinConfirm) {
+      setLockErr("PINs don't match");
+      shakeDots();
+      _pin = ""; _pinConfirm = null;
+      $("pin-label").textContent = "Create a PIN";
+      $("lock-hint").textContent = "Choose a numeric PIN (min 4 digits)";
+      renderPinDots();
+      $("nk-submit").classList.add("dim");
+      return;
+    }
+    await setupVault(_pin);
     return;
   }
-  STATE.masterKey = pw;
+
+  const hash = await Crypto.hashPassword(_pin);
+  if (hash !== LS.get("vault_hash")) {
+    recordFailedAttempt();
+    const remaining = 3 - getFailCount();
+    if (remaining <= 0) { startLockout(); }
+    else {
+      setLockErr("Wrong PIN — " + remaining + " attempt" + (remaining === 1 ? "" : "s") + " left");
+      shakeDots();
+    }
+    _pin = "";
+    renderPinDots();
+    $("nk-submit").classList.add("dim");
+    return;
+  }
+
+  clearFailCount();
+  STATE.masterKey = _pin;
+  _pin = "";
   await loadItems();
   openApp();
 }
 
 async function setupVault(pw) {
-  if (pw.length < 4) { setLockErr("Min 4 characters"); return; }
+  if (pw.length < 4) { setLockErr("Min 4 digits"); return; }
   const hash = await Crypto.hashPassword(pw);
   LS.set("vault_hash", hash);
   STATE.masterKey = pw;
   STATE.items = [];
+  _pin = ""; _pinConfirm = null;
   openApp();
 }
 
@@ -169,13 +242,12 @@ function openApp() {
   renderAll();
   updateStats();
   renderDrivePanel();
-  // Show Drive banner if not configured or not connected
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
     $("drive-banner").classList.add("show");
     $("db-msg").textContent = configured
       ? "Connect Google Drive to sync your vault across devices"
-      : "âš™ï¸ Add your Google Client ID in config.js to enable Drive sync";
+      : "Add your Google Client ID in config.js to enable Drive sync";
   }
 }
 
@@ -184,15 +256,70 @@ function lockVault() {
   STATE.items     = [];
   STATE.expandedId = null;
   STATE.pwVisible  = {};
+  _pin = ""; _pinConfirm = null;
   $("lock").classList.remove("gone");
-  $("lock-inp").value = "";
   setLockErr("");
+  renderPinDots();
+  const btn = $("nk-submit");
+  if (btn) btn.classList.add("dim");
+  const hasVault = !!LS.get("vault_hash");
+  $("pin-label").textContent = hasVault ? "Enter PIN" : "Create a PIN";
+  $("lock-hint").textContent = hasVault
+    ? "Min 4 digits · Locked after 3 wrong attempts"
+    : "Choose a numeric PIN (min 4 digits)";
 }
 
 function setLockErr(msg) { $("lock-err").textContent = msg; }
-function toggleLockEye() {
-  const inp = $("lock-inp");
-  inp.type = inp.type === "password" ? "text" : "password";
+
+function shakeDots() {
+  const el = $("pin-dots");
+  if (!el) return;
+  el.classList.add("shake");
+  setTimeout(() => el.classList.remove("shake"), 500);
+}
+
+// — Lockout tracking —
+function getFailCount() { return LS.get("vault_fails") || 0; }
+function recordFailedAttempt() { LS.set("vault_fails", getFailCount() + 1); }
+function clearFailCount() { LS.del("vault_fails"); LS.del("vault_lockout_until"); }
+
+function startLockout() {
+  const until = Date.now() + 10 * 60 * 1000;
+  LS.set("vault_lockout_until", until);
+  LS.set("vault_fails", 0);
+  applyLockout(until);
+}
+
+function checkLockout() {
+  const until = LS.get("vault_lockout_until");
+  if (!until || Date.now() >= until) { endLockout(); return; }
+  applyLockout(until);
+}
+
+function applyLockout(until) {
+  $("pin-entry").style.display = "none";
+  $("lock-hint").style.display = "none";
+  $("lock-blocked").classList.add("show");
+  setLockErr("");
+  if (_lockoutTimer) clearInterval(_lockoutTimer);
+  _lockoutTimer = setInterval(() => {
+    const remaining = until - Date.now();
+    if (remaining <= 0) { endLockout(); return; }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    $("lb-timer").textContent = String(mins).padStart(2,"0") + ":" + String(secs).padStart(2,"0");
+  }, 250);
+}
+
+function endLockout() {
+  if (_lockoutTimer) { clearInterval(_lockoutTimer); _lockoutTimer = null; }
+  LS.del("vault_lockout_until");
+  $("lock-blocked").classList.remove("show");
+  $("pin-entry").style.display = "flex";
+  $("lock-hint").style.display = "";
+  _pin = "";
+  renderPinDots();
+  $("nk-submit").classList.add("dim");
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -540,6 +667,7 @@ function renderList() {
     </div>`;
     return;
   }
+  area.innerHTML = list.map(cardHTML).join("");
 }
 
 function renderAll() { renderList(); renderSelectedTags(); }

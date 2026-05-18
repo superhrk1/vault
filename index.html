@@ -148,18 +148,6 @@ body  { font-family: var(--sans); color: var(--tx); background: var(--bg);
          letter-spacing: .2px; }
 .fbtn.on { background: var(--acbg); border-color: var(--ac); color: var(--ac2); }
 
-/* ── FILTER BAR ─────────────────────────────── */
-#filter-bar { flex-shrink: 0; background: var(--s1); border-bottom: 1px solid var(--b1);
-              padding: 7px 14px; display: flex; gap: 6px; align-items: center;
-              overflow-x: auto; scrollbar-width: none; }
-#filter-bar::-webkit-scrollbar { display: none; }
-.fpill { padding: 5px 13px; border-radius: 99px; font-size: 11px; font-weight: 700;
-         border: 1px solid var(--b1); color: var(--muted); cursor: pointer;
-         white-space: nowrap; background: var(--s3); transition: all .15s; flex-shrink: 0; letter-spacing: .2px; }
-.fpill.on  { background: var(--acbg); border-color: var(--ac); color: var(--ac2); }
-.fpill.tag-on { background: rgba(96,165,250,.12); border-color: rgba(96,165,250,.3); color: var(--blue); }
-.fpill.search-active { opacity: .45; pointer-events: none; }
-
 /* ── PRIORITY BADGE on card ──────────────────── */
 .bpp { background: rgba(248,113,113,.18); color: #f87171; border: 1px solid rgba(248,113,113,.28); }
 
@@ -173,14 +161,43 @@ body  { font-family: var(--sans); color: var(--tx); background: var(--bg);
 .pricard.hi.on { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.12); color: #f87171; }
 .prico { font-size: 16px; }
 
-/* ── TAG SHEET ───────────────────────────────── */
-.tag-cb-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px;
-              border-bottom: 1px solid var(--b1); cursor: pointer; }
-.tag-cb-row:last-child { border-bottom: none; }
-.tag-cb { width: 18px; height: 18px; accent-color: var(--ac); flex-shrink: 0; cursor: pointer; }
-.tag-cb-label { flex: 1; font-size: 13px; color: var(--tx); font-weight: 500; }
-.tag-cb-count { font-size: 11px; color: var(--faint); font-family: var(--mono); }
-.tag-sheet-empty { font-size: 13px; color: var(--faint); text-align: center; padding: 30px 0; }
+/* ── TAG FILTER ROW ──────────────────────────── */
+#tag-filter-row { flex-shrink: 0; background: var(--s1); border-bottom: 1px solid var(--b1);
+                  padding: 7px 14px 8px; display: flex; flex-direction: column; gap: 6px; }
+.tag-input-wrap { position: relative; display: flex; align-items: center; }
+.tag-sico { position: absolute; left: 10px; font-size: 13px; color: var(--faint); pointer-events: none; }
+#tag-q { width: 100%; background: var(--s3); border: 1px solid var(--b1); border-radius: 9px;
+         padding: 8px 30px 8px 30px; font-size: 13px; color: var(--tx);
+         font-family: var(--sans); outline: none; transition: border-color .2s; -webkit-appearance: none; }
+#tag-q:focus { border-color: var(--b2); }
+#tag-q-clear { position: absolute; right: 10px; font-size: 13px; cursor: pointer;
+               color: var(--faint); display: none; }
+/* autocomplete suggestions */
+#tag-autocomplete { display: none; flex-wrap: wrap; gap: 5px; padding-top: 2px; }
+.tag-ac-chip { padding: 4px 11px; background: var(--s2); border: 1px solid var(--b2);
+               border-radius: 99px; font-size: 11px; font-weight: 700; color: var(--ac2);
+               cursor: pointer; white-space: nowrap; transition: all .12s; }
+.tag-ac-chip:active,.tag-ac-chip:hover { background: var(--acbg); border-color: var(--ac); }
+.tag-ac-count { font-size: 10px; color: var(--faint); font-weight: 400; }
+/* selected tags */
+#selected-tags { display: none; flex-wrap: wrap; gap: 5px; align-items: center; }
+.stag { display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 10px;
+        background: rgba(96,165,250,.12); border: 1px solid rgba(96,165,250,.28);
+        border-radius: 99px; font-size: 11px; font-weight: 700; color: var(--blue); }
+.stag-x { cursor: pointer; color: var(--faint); font-size: 12px;
+           line-height: 1; padding: 1px; transition: color .15s; }
+.stag-x:hover { color: var(--red); }
+.stag-clear { font-size: 11px; color: var(--faint); cursor: pointer; padding: 3px 6px;
+              font-weight: 600; transition: color .15s; }
+.stag-clear:hover { color: var(--red); }
+
+/* ── FLAG / EXPIRY BADGE ───────────────────────── */
+.flag-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 9px;
+              font-weight: 700; padding: 2px 7px; border-radius: 99px; letter-spacing: .2px; }
+.flag-badge.expired { background: rgba(248,113,113,.18); color: #f87171; border: 1px solid rgba(248,113,113,.28); }
+.flag-badge.urgent  { background: rgba(251,191,36,.18);  color: #fbbf24; border: 1px solid rgba(251,191,36,.28); }
+.flag-badge.soon    { background: rgba(96,165,250,.14);  color: var(--blue); border: 1px solid rgba(96,165,250,.25); }
+.flag-badge.ok      { background: var(--gbg); color: var(--green); border: 1px solid rgba(74,222,128,.2); }
 
 /* ── LIST ───────────────────────────────────── */
 #list { flex: 1; overflow-y: auto; padding: 10px 14px 100px;
@@ -461,17 +478,21 @@ textarea.fi { resize: none; min-height: 80px; line-height: 1.6; }
 <div id="search-row">
   <div class="sbox">
     <span class="sico">🔍</span>
-    <input id="q" class="sinp" type="search" placeholder="Search…" oninput="onSearch(this)">
+    <input id="q" class="sinp" type="search" placeholder="Search items…" oninput="onSearch(this)">
     <span id="q-clear" onclick="clearSearch()">✕</span>
   </div>
   <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">★ Fav</button>
-  <button class="fbtn" id="tag-btn" onclick="openTagSheet()">🏷 Tags</button>
 </div>
 
-<!-- ─── FILTER BAR ─────────────────────────────────────── -->
-<div id="filter-bar">
-  <div class="fpill on" id="pri-pill" onclick="togglePriorityFilter()" title="Show high-priority items only">⚡ Priority</div>
-  <div class="fpill tag-on" id="tag-pill" style="display:none" onclick="openTagSheet()">🏷 0 tags</div>
+<!-- ─── TAG FILTER ROW ───────────────────────────────────── -->
+<div id="tag-filter-row">
+  <div class="tag-input-wrap">
+    <span class="tag-sico">🏷</span>
+    <input id="tag-q" placeholder="Filter by tag…" oninput="onTagSearch(this)" autocomplete="off">
+    <span id="tag-q-clear" onclick="clearTagSearch()">✕</span>
+  </div>
+  <div id="tag-autocomplete"></div>
+  <div id="selected-tags"></div>
 </div>
 
 <!-- ─── ITEM LIST ─────────────────────────────────────── -->
@@ -513,7 +534,8 @@ textarea.fi { resize: none; min-height: 80px; line-height: 1.6; }
   <div class="set-sec">
     <div class="set-lbl">Sort Order</div>
     <div class="sort-row" id="sort-row">
-      <div class="sort-chip on" onclick="setSort('name',this)">Name A→Z</div>
+      <div class="sort-chip on" onclick="setSort('urgency',this)">⚡ Urgency</div>
+      <div class="sort-chip"    onclick="setSort('name',this)">Name A→Z</div>
       <div class="sort-chip"    onclick="setSort('name-d',this)">Name Z→A</div>
       <div class="sort-chip"    onclick="setSort('new',this)">Newest</div>
       <div class="sort-chip"    onclick="setSort('old',this)">Oldest</div>
@@ -606,24 +628,7 @@ textarea.fi { resize: none; min-height: 80px; line-height: 1.6; }
   </div>
 </div>
 
-<!-- ─── TAG FILTER SHEET ────────────────────────────────── -->
-<div class="overlay" id="tag-overlay">
-  <div class="sheet">
-    <div class="shdl"></div>
-    <div class="shhdr">
-      <div class="shtitle">Filter by Tags</div>
-      <div class="shclose" onclick="applyTagFilter()">✕</div>
-    </div>
-    <div class="shbody" style="gap:0;padding:10px 18px 4px">
-      <input id="tag-sheet-q" class="fi" placeholder="Search tags…" style="margin-bottom:10px;flex-shrink:0" oninput="renderTagSheet()">
-      <div id="tag-sheet-list" style="overflow-y:auto;flex:1"></div>
-    </div>
-    <div class="shfoot">
-      <button class="btn ghost" onclick="clearTagFilter()">Clear All</button>
-      <button class="btn primary" onclick="applyTagFilter()">Apply</button>
-    </div>
-  </div>
-</div>
+<!-- tag-overlay removed: replaced by inline autocomplete -->
 
 <!-- ─── SCRIPTS ─────────────────────────────────────── -->
 <script src="config.js"></script>

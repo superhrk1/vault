@@ -63,24 +63,23 @@ const Crypto = {
 //  STATE
 // ══════════════════════════════════════════════════════════
 let STATE = {
-  masterKey        : null,   // plaintext password in memory only
-  items            : [],     // decrypted items in memory only
+  masterKey        : null,
+  items            : [],
   tab              : "all",
   favOnly          : false,
-  activeTags       : [],     // multi-select tag filter
-  highPriorityOnly : true,   // home screen defaults to high-priority items
-  sort             : "name",
+  activeTags       : [],
+  sort             : "urgency",   // urgency | name | name-d | new | old | type
   expandedId       : null,
   pwVisible        : {},
   editId           : null,
   mTags            : [],
   mType            : "password",
-  mPriority        : "high", // priority for current form
+  mPriority        : "high",
   genOpts          : { upper:true, lower:true, num:true, sym:true },
   drive: {
     token     : null,
     fileId    : null,
-    status    : "offline",  // offline | syncing | synced | error | noconfig
+    status    : "offline",
     lastSync  : null,
   }
 };
@@ -464,20 +463,6 @@ function getAllTags() {
   return [...s].sort();
 }
 
-function updateTagPill() {
-  const pill = $("tag-pill"), btn = $("tag-btn");
-  const n = STATE.activeTags.length;
-  if (pill) { pill.style.display = n ? "flex" : "none"; pill.textContent = `🏷 ${n} tag${n===1?"":"s"}`; }
-  if (btn)  { btn.textContent = n ? `🏷 Tags (${n})` : "🏷 Tags"; btn.classList.toggle("on", n > 0); }
-}
-
-function togglePriorityFilter() {
-  STATE.highPriorityOnly = !STATE.highPriorityOnly;
-  const pill = $("pri-pill");
-  if (pill) pill.classList.toggle("on", STATE.highPriorityOnly);
-  renderList();
-}
-
 function toggleFavFilter() {
   STATE.favOnly = !STATE.favOnly;
   $("fav-btn").classList.toggle("on", STATE.favOnly);
@@ -493,42 +478,50 @@ function switchTab(el, t) {
 
 function onSearch(inp) {
   $("q-clear").style.display = inp.value ? "block" : "none";
-  // Gray-out the Priority pill while searching (filter is bypassed)
-  const pill = $("pri-pill");
-  if (pill) pill.classList.toggle("search-active", inp.value.length > 0);
   renderList();
 }
 function clearSearch() {
   $("q").value = "";
   $("q-clear").style.display = "none";
-  const pill = $("pri-pill");
-  if (pill) pill.classList.remove("search-active");
   renderList();
 }
 
+// Returns urgency score (lower = more urgent) for smart home sort
+function getItemUrgency(item) {
+  const fd = item.flagDate;
+  if (fd) {
+    const days = (new Date(fd).getTime() - Date.now()) / 86400000;
+    if (days < 0)   return 0;   // expired
+    if (days < 1)   return 1;   // today
+    if (days < 3)   return 2;   // very soon
+    if (days < 7)   return 3;   // soon
+    if (days < 30)  return 4;   // upcoming
+  }
+  if (item.priority === "high") return 5;
+  return 6;
+}
+
 function filtered() {
-  const q        = ($("q")?.value || "").toLowerCase();
-  const searching = q.length > 0;
+  const q = ($("q")?.value || "").toLowerCase();
   let r = STATE.items.filter(i => {
     if (STATE.tab !== "all" && i.type !== STATE.tab) return false;
     if (STATE.favOnly && !i.fav) return false;
-    // Priority filter: only when NOT actively searching
-    if (!searching && STATE.highPriorityOnly && i.priority !== "high") return false;
-    // Multi-tag filter: item must match ANY selected tag
+    // Multi-tag: item must match ANY selected tag
     if (STATE.activeTags.length > 0 && !STATE.activeTags.some(t => (i.tags||[]).includes(t))) return false;
     if (!q) return true;
     return [i.title, i.username, i.url, i.note, ...(i.tags||[])].some(v => (v||"").toLowerCase().includes(q));
   });
-  // High-priority view: sort by newest first
-  if (!searching && STATE.highPriorityOnly) {
-    r.sort((a,b) => (b.created||0) - (a.created||0));
-  } else {
-    if (STATE.sort === "name")   r.sort((a,b) => (a.title||"").localeCompare(b.title||""));
-    if (STATE.sort === "name-d") r.sort((a,b) => (b.title||"").localeCompare(a.title||""));
-    if (STATE.sort === "new")    r.sort((a,b) => b.created - a.created);
-    if (STATE.sort === "old")    r.sort((a,b) => a.created - b.created);
-    if (STATE.sort === "type")   r.sort((a,b) => (a.type||"").localeCompare(b.type||""));
-  }
+  // Sort
+  if (STATE.sort === "urgency" || !STATE.sort) {
+    r.sort((a, b) => {
+      const diff = getItemUrgency(a) - getItemUrgency(b);
+      return diff !== 0 ? diff : (b.created||0) - (a.created||0);
+    });
+  } else if (STATE.sort === "name")   r.sort((a,b) => (a.title||"").localeCompare(b.title||""));
+  else if (STATE.sort === "name-d")   r.sort((a,b) => (b.title||"").localeCompare(a.title||""));
+  else if (STATE.sort === "new")      r.sort((a,b) => b.created - a.created);
+  else if (STATE.sort === "old")      r.sort((a,b) => a.created - b.created);
+  else if (STATE.sort === "type")     r.sort((a,b) => (a.type||"").localeCompare(b.type||""));
   return r;
 }
 
@@ -537,7 +530,17 @@ function renderList() {
   const list = filtered();
   if (!list.length) {
     const icons = { all:"🔐", password:"🔑", subscription:"💳", bookmark:"🔖", note:"📝" };
-    const hint  = (STATE.highPriorityOnly && !($("q")?.value))
+    const hint = STATE.activeTags.length
+      ? "No items match the selected tags."
+      : "Tap + to add your first item";
+    area.innerHTML = `<div class="empty">
+      <div class="empty-ico">${icons[STATE.tab]||"🔍"}</div>
+      <div class="empty-title">Nothing here yet</div>
+      <div class="empty-sub">${hint}</div>
+    </div>`;
+    return;
+  }
+"q")?.value))
       ? "No high-priority items yet. Tap \u26a1\ufe0e Priority to see all."
       : "Tap the + button to add your first item";
     area.innerHTML = `<div class="empty">
@@ -550,7 +553,7 @@ function renderList() {
   area.innerHTML = list.map(cardHTML).join("");
 }
 
-function renderAll() { renderList(); updateTagPill(); }
+function renderAll() { renderList(); renderSelectedTags(); }
 
 function cardHTML(item) {
   const ico  = T_ICON[item.type]  || "📄";
@@ -569,13 +572,26 @@ function cardHTML(item) {
         <div class="ct">${esc(item.title||"Untitled")}</div>
         <div class="cs">${esc(sub)}</div>
       </div>
-      <div class="cbadges">${pri}${fav}${tags}</div>
+      <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
       <div class="chev">⌄</div>
     </div>
     ${exp ? `
     <div class="card-detail">${detailHTML(item)}</div>
     <div class="card-actions">${actionsHTML(item)}</div>` : ""}
   </div>`;
+}
+
+function getFlagBadge(item) {
+  const fd = item.flagDate;
+  if (!fd) return "";
+  const days = Math.ceil((new Date(fd).getTime() - Date.now()) / 86400000);
+  let cls, ico, label;
+  if (days < 0)        { cls="expired"; ico="⛔";  label=`${Math.abs(days)}d ago`; }
+  else if (days === 0) { cls="urgent";  ico="⚠️"; label="Today"; }
+  else if (days <= 3)  { cls="urgent";  ico="⚠️"; label=`${days}d left`; }
+  else if (days <= 14) { cls="soon";    ico="📅"; label=`${days}d left`; }
+  else                 { cls="ok";      ico="📅"; label=new Date(fd).toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+  return `<span class="flag-badge ${cls}">${ico} ${label}</span>`;
 }
 
 
@@ -768,6 +784,13 @@ function buildForm(type, pre) {
       </div>
     </div>`;
 
+  const flagBlock = `
+    <div class="fg">
+      <div class="fl">Flag / Expires</div>
+      <input class="fi" id="f-flagDate" type="date" value="${esc(pre?.flagDate||"")}" style="color-scheme:dark">
+      <div style="font-size:11px;color:var(--faint);margin-top:3px">Optional — item will show an expiry countdown on cards</div>
+    </div>`;
+
   const tagsBlock = `
     <div class="fg">
       <div class="fl">Tags</div>
@@ -778,7 +801,7 @@ function buildForm(type, pre) {
       <div class="chips" id="mchips">${renderChips()}</div>
     </div>`;
 
-  body.innerHTML = typeGrid + fields + priorityBlock + tagsBlock;
+  body.innerHTML = typeGrid + fields + priorityBlock + flagBlock + tagsBlock;
   foot.innerHTML = `
     <button class="btn ghost" onclick="closeOverlay('add-overlay')">Cancel</button>
     <button class="btn primary" onclick="submitItem()">${STATE.editId?"Save Changes":"Add Item"}</button>`;
@@ -857,6 +880,7 @@ async function submitItem() {
     renewal  : fv("f-renewal"),
     tags     : [...STATE.mTags],
     priority : STATE.mPriority || "normal",
+    flagDate : fv("f-flagDate") || null,
   };
   await saveItem(item);
   closeOverlay("add-overlay");
@@ -1012,8 +1036,8 @@ function showPage(p) {
   ["statusbar","tabs","search-row","list"].forEach(id => {
     const el = $(id); if (el) el.style.display = id==="list" ? (home?"flex":"none") : (home?"":"none");
   });
-  const fb = $("filter-bar");
-  if (fb) fb.style.display = home ? "flex" : "none";
+  const tfr = $("tag-filter-row");
+  if (tfr) tfr.style.display = home ? "flex" : "none";
   $("drive-banner").style.display = (home && !STATE.drive.token && !LS.get("drive_banner_dismissed")) ? "flex" : "none";
   $("settings").classList.toggle("show", !home);
   $("fab").style.display = home ? "flex" : "none";
@@ -1051,51 +1075,69 @@ function toast(msg) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  TAG FILTER SHEET
+//  TAG AUTOCOMPLETE (inline)
 // ══════════════════════════════════════════════════════════
-function openTagSheet() {
-  const inp = $("tag-sheet-q");
-  if (inp) inp.value = "";
-  renderTagSheet();
-  openOverlay("tag-overlay");
+function onTagSearch(inp) {
+  const q = inp.value.trim();
+  $("tag-q-clear").style.display = q ? "block" : "none";
+  renderTagAutocomplete(q);
 }
 
-function renderTagSheet() {
-  const q       = ($("tag-sheet-q")?.value || "").toLowerCase();
-  const allTags = getAllTags();
-  const visible = q ? allTags.filter(t => t.toLowerCase().includes(q)) : allTags;
-  const list    = $("tag-sheet-list");
-  if (!list) return;
-  if (!visible.length) {
-    list.innerHTML = `<div class="tag-sheet-empty">No tags found</div>`;
-    return;
-  }
-  list.innerHTML = visible.map(t => {
-    const count   = STATE.items.filter(i => (i.tags||[]).includes(t)).length;
-    const checked = STATE.activeTags.includes(t);
-    return `<label class="tag-cb-row">
-      <input type="checkbox" class="tag-cb" ${checked ? "checked" : ""}
-             onchange="toggleTagSel('${esc(t)}',this.checked)">
-      <span class="tag-cb-label">#${esc(t)}</span>
-      <span class="tag-cb-count">${count}</span>
-    </label>`;
+function renderTagAutocomplete(q) {
+  const dropdown = $("tag-autocomplete");
+  if (!dropdown) return;
+  if (!q) { dropdown.style.display = "none"; return; }
+  const ql = q.toLowerCase();
+  const matches = getAllTags()
+    .filter(t => t.toLowerCase().includes(ql) && !STATE.activeTags.includes(t))
+    .slice(0, 20);
+  if (!matches.length) { dropdown.style.display = "none"; return; }
+  dropdown.style.display = "flex";
+  dropdown.innerHTML = matches.map(t => {
+    const n = STATE.items.filter(i => (i.tags||[]).includes(t)).length;
+    return `<span class="tag-ac-chip" onclick="selectAutoTag('${esc(t)}')">#${esc(t)} <span class="tag-ac-count">${n}</span></span>`;
   }).join("");
 }
 
-function toggleTagSel(tag, checked) {
-  if (checked && !STATE.activeTags.includes(tag)) STATE.activeTags.push(tag);
-  if (!checked) STATE.activeTags = STATE.activeTags.filter(t => t !== tag);
+function selectAutoTag(tag) {
+  if (!STATE.activeTags.includes(tag)) {
+    STATE.activeTags.push(tag);
+    renderSelectedTags();
+    renderList();
+  }
+  const inp = $("tag-q");
+  if (inp) inp.value = "";
+  $("tag-q-clear").style.display = "none";
+  $("tag-autocomplete").style.display = "none";
 }
 
-function clearTagFilter() {
-  STATE.activeTags = [];
-  renderTagSheet();
-}
-
-function applyTagFilter() {
-  closeOverlay("tag-overlay");
-  updateTagPill();
+function removeActiveTag(tag) {
+  STATE.activeTags = STATE.activeTags.filter(t => t !== tag);
+  renderSelectedTags();
   renderList();
+}
+
+function clearAllTags() {
+  STATE.activeTags = [];
+  renderSelectedTags();
+  renderList();
+}
+
+function renderSelectedTags() {
+  const el = $("selected-tags");
+  if (!el) return;
+  const n = STATE.activeTags.length;
+  el.style.display = n ? "flex" : "none";
+  el.innerHTML = STATE.activeTags.map(t =>
+    `<span class="stag">#${esc(t)}<span class="stag-x" onclick="removeActiveTag('${esc(t)}')">✕</span></span>`
+  ).join("") + (n > 1 ? `<span class="stag-clear" onclick="clearAllTags()">Clear all</span>` : "");
+}
+
+function clearTagSearch() {
+  const inp = $("tag-q");
+  if (inp) inp.value = "";
+  $("tag-q-clear").style.display = "none";
+  $("tag-autocomplete").style.display = "none";
 }
 
 // ══════════════════════════════════════════════════════════

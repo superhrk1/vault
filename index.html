@@ -339,6 +339,129 @@
       color: var(--muted);
     }
 
+    .lb-pw-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 300px;
+      margin-top: 6px;
+    }
+
+    .lb-pw-wrap .fl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--faint);
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+
+    .lb-pw-input {
+      width: 100%;
+      background: var(--s2);
+      border: 1px solid var(--b2);
+      border-radius: var(--r);
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--tx);
+      font-family: var(--mono);
+      outline: none;
+      text-align: center;
+      transition: border-color .2s;
+      -webkit-appearance: none;
+    }
+
+    .lb-pw-input:focus {
+      border-color: var(--ac);
+    }
+
+    .lb-pw-input.shake {
+      animation: dotshake .4s ease;
+    }
+
+    .lb-pw-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--ac);
+      color: #fff;
+      border: none;
+      border-radius: var(--r);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--sans);
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+
+    .lb-pw-btn:active {
+      opacity: .8;
+    }
+
+    /* ── BIOMETRIC SECTION ────────────────────── */
+    .bio-section {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .bio-section.show {
+      display: flex;
+    }
+
+    .bio-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .bio-divider::before,
+    .bio-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--b2);
+    }
+
+    .bio-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--s2);
+      border: 1px solid var(--b2);
+      border-radius: var(--r2);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tx);
+      font-family: var(--sans);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: background .15s, border-color .15s;
+    }
+
+    .bio-btn:active {
+      background: var(--s3);
+    }
+
+    .bio-btn:hover {
+      border-color: var(--ac);
+    }
+
+    .bio-ico {
+      font-size: 22px;
+    }
+
     /* ── STATUS BAR ─────────────────────────────── */
     #statusbar {
       flex-shrink: 0;
@@ -1788,6 +1911,12 @@
       <div class="lb-title">Too many failed attempts</div>
       <div class="lb-timer" id="lb-timer">10:00</div>
       <div class="lb-sub">Vault locked for security</div>
+      <div class="lb-pw-wrap">
+        <div class="fl">Or unlock with master password</div>
+        <input class="lb-pw-input" id="lb-pw" type="password" placeholder="Enter master password…"
+          onkeydown="if(event.key==='Enter')masterPwUnlock()">
+        <button class="lb-pw-btn" onclick="masterPwUnlock()">Unlock</button>
+      </div>
     </div>
 
     <!-- PIN entry area -->
@@ -1813,6 +1942,14 @@
         <div class="nk" onclick="numpadPress('0')">0</div>
         <div class="nk nk-submit dim" id="nk-submit" onclick="handlePinSubmit()">✓</div>
       </div>
+    </div>
+
+    <!-- Biometric unlock -->
+    <div class="bio-section" id="bio-section">
+      <div class="bio-divider">or</div>
+      <button class="bio-btn" onclick="biometricUnlock()">
+        <span class="bio-ico">👆</span> Unlock with Fingerprint
+      </button>
     </div>
 
     <div class="lock-hint" id="lock-hint">Min 4 digits &middot; Locked after 3 wrong attempts</div>

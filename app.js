@@ -268,6 +268,8 @@ function endLockout() {
   if (_lockoutTimer) { clearInterval(_lockoutTimer); _lockoutTimer = null; }
   LS.del("vault_lockout_until");
   $("lock-blocked").classList.remove("show");
+  // Clear master password input
+  const lbPw = $("lb-pw"); if (lbPw) lbPw.value = "";
   $("pin-entry").style.display = "flex"; $("lock-hint").style.display = "";
   _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim");
   // Re-show biometric if available
@@ -283,6 +285,7 @@ async function masterPwUnlock() {
     $("lb-pw").value = "";
     $("lb-pw").classList.add("shake");
     setTimeout(() => $("lb-pw").classList.remove("shake"), 500);
+    toast("Wrong password");
     return;
   }
   clearFailCount();

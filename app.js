@@ -1149,6 +1149,8 @@ function cab(ico, label, cls, fn) {
 }
 
 function toggleCard(id) {
+  // Hide any revealed passwords when switching cards
+  STATE.pwVisible = {};
   STATE.expandedId = STATE.expandedId === id ? null : id;
   renderList();
   if (STATE.expandedId) {
@@ -1482,6 +1484,7 @@ function askDelete(id) {
   $("confirm-msg").textContent    = `Delete "${item.title}"? This cannot be undone.`;
   $("confirm-ok").textContent     = "Delete";
   $("confirm-ok").onclick = async () => {
+    STATE.expandedId = null;
     await removeItem(id);
     closeOverlay("confirm-overlay");
     toast("Deleted");

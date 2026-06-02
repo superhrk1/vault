@@ -983,6 +983,7 @@ function cardHTML(item) {
   if (item.type === "todo") return todoCardHTML(item);
   const ico  = T_ICON[item.type]  || "📄";
   const cls  = T_CLASS[item.type] || "ip";
+  const ccls = {password:"card-pw",bookmark:"card-bm",note:"card-nt"}[item.type] || "";
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
   const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
   const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
@@ -990,7 +991,7 @@ function cardHTML(item) {
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
-  return `<div class="card${exp?" open":""}" id="card-${id}">
+  return `<div class="card ${ccls}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci ${cls}">${ico}</div>
       <div class="cm">
@@ -1048,7 +1049,7 @@ function todoCardHTML(item) {
     </div>`;
   }
 
-  return `<div class="card todo-card${colorClass}${exp?" open":""}" id="card-${id}">
+  return `<div class="card card-td todo-card${colorClass}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci it">✅</div>
       <div class="cm">

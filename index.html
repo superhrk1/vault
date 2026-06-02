@@ -99,7 +99,7 @@
       position: fixed;
       inset: 0;
       background: var(--bg);
-      background-image: radial-gradient(ellipse at 50% 30%, rgba(124,106,245,.06) 0%, transparent 60%);
+      background-image: radial-gradient(ellipse at 50% 30%, rgba(124, 106, 245, .06) 0%, transparent 60%);
       z-index: 900;
       display: flex;
       flex-direction: column;
@@ -239,11 +239,10 @@
     /* ── NUMPAD ─────────────────────────────── */
     .numpad {
       display: grid;
-      grid-template-columns: repeat(3, 60px);
-      gap: 14px;
-      justify-content: center;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
       width: 100%;
-      max-width: 260px;
+      max-width: 280px;
     }
 
     .nk {
@@ -468,7 +467,9 @@
     /* ── STATUS BAR ─────────────────────────────── */
     #statusbar {
       flex-shrink: 0;
-      background: var(--s1);
+      background: rgba(17, 18, 25, .88);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--b1);
       padding: 12px 16px;
       display: flex;
@@ -622,30 +623,37 @@
     /* ── TABS ───────────────────────────────────── */
     #tabs {
       flex-shrink: 0;
-      background: var(--s1);
+      background: var(--bg);
       border-bottom: 1px solid var(--b1);
       display: flex;
-      padding: 0 4px;
+      padding: 8px 12px;
+      gap: 8px;
+      overflow-x: auto;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
+    #tabs::-webkit-scrollbar { display: none; }
 
     .tab {
-      flex: 1;
-      padding: 9px 2px 12px;
+      padding: 7px 16px;
       text-align: center;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--muted);
       cursor: pointer;
-      border-bottom: 2px solid transparent;
+      border: 1px solid var(--b2);
+      border-radius: 99px;
+      background: var(--s1);
       transition: all .2s;
       letter-spacing: .3px;
-      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .tab.on {
-      color: var(--ac2);
-      border-bottom-color: var(--ac);
-      background: rgba(124,106,245,.05);
+      color: #fff;
+      background: var(--ac);
+      border-color: var(--ac);
     }
 
     /* ── SEARCH ─────────────────────────────────── */
@@ -689,7 +697,8 @@
     }
 
     .sinp:focus {
-      border-color: var(--b2);
+      border-color: var(--ac);
+      box-shadow: 0 0 0 2px rgba(124, 106, 245, .12);
     }
 
     #q-clear {
@@ -992,14 +1001,25 @@
 
     .card.open {
       border-color: var(--b2);
-      box-shadow: 0 4px 24px rgba(0,0,0,.3);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .3);
     }
 
     /* Per-type card accent borders */
-    .card:has(.ip) { border-left-color: var(--ac); }
-    .card:has(.ib) { border-left-color: var(--blue); }
-    .card:has(.in) { border-left-color: var(--amber); }
-    .card:has(.it) { border-left-color: var(--green); }
+    .card-pw {
+      border-left-color: var(--ac);
+    }
+
+    .card-bm {
+      border-left-color: var(--blue);
+    }
+
+    .card-nt {
+      border-left-color: var(--amber);
+    }
+
+    .card-td {
+      border-left-color: var(--green);
+    }
 
     .card-top {
       display: flex;
@@ -1449,27 +1469,64 @@
       background: var(--rbg);
       border-color: rgba(248, 113, 113, .2);
     }
+
     /* ── INLINE GENERATOR PILLS ────────────────── */
     .gen-pill {
-      padding:5px 12px; background:var(--s3); border:1px solid var(--b1);
-      border-radius:99px; font-size:11px; font-weight:700; color:var(--muted);
-      cursor:pointer; font-family:var(--sans); transition:all .15s;
-      user-select:none;
+      padding: 5px 12px;
+      background: var(--s3);
+      border: 1px solid var(--b1);
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: all .15s;
+      user-select: none;
     }
+
     .gen-pill.on {
-      background:var(--acbg); border-color:var(--ac); color:var(--ac2);
+      background: var(--acbg);
+      border-color: var(--ac);
+      color: var(--ac2);
     }
 
     /* ── TODO CARD ──────────────────────────────── */
-    .todo-card { border-left: 3px solid var(--ac); }
-    .todo-card.color-red    { border-left-color: #f87171; }
-    .todo-card.color-orange { border-left-color: #fb923c; }
-    .todo-card.color-amber  { border-left-color: #fbbf24; }
-    .todo-card.color-green  { border-left-color: #4ade80; }
-    .todo-card.color-teal   { border-left-color: #2dd4bf; }
-    .todo-card.color-blue   { border-left-color: #60a5fa; }
-    .todo-card.color-purple { border-left-color: #7c6af5; }
-    .todo-card.color-pink   { border-left-color: #f472b6; }
+    .todo-card {
+      border-left: 3px solid var(--ac);
+    }
+
+    .todo-card.color-red {
+      border-left-color: #f87171;
+    }
+
+    .todo-card.color-orange {
+      border-left-color: #fb923c;
+    }
+
+    .todo-card.color-amber {
+      border-left-color: #fbbf24;
+    }
+
+    .todo-card.color-green {
+      border-left-color: #4ade80;
+    }
+
+    .todo-card.color-teal {
+      border-left-color: #2dd4bf;
+    }
+
+    .todo-card.color-blue {
+      border-left-color: #60a5fa;
+    }
+
+    .todo-card.color-purple {
+      border-left-color: #7c6af5;
+    }
+
+    .todo-card.color-pink {
+      border-left-color: #f472b6;
+    }
 
     .todo-detail {
       border-top: 1px solid var(--b1);
@@ -1477,146 +1534,377 @@
       padding: 12px 14px;
     }
 
-    .todo-progress { display:flex; align-items:center; gap:8px; padding:8px 0 6px; }
-    .todo-prog-bar { flex:1; height:4px; border-radius:99px; background:var(--s3); overflow:hidden; }
-    .todo-prog-fill { height:100%; border-radius:99px; background:var(--green); transition:width .3s; }
-    .todo-prog-label { font-size:11px; color:var(--muted); font-weight:700; white-space:nowrap; }
+    .todo-progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0 6px;
+    }
 
-    .todo-tree { display:flex; flex-direction:column; }
+    .todo-prog-bar {
+      flex: 1;
+      height: 4px;
+      border-radius: 99px;
+      background: var(--s3);
+      overflow: hidden;
+    }
+
+    .todo-prog-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--green);
+      transition: width .3s;
+    }
+
+    .todo-prog-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .todo-tree {
+      display: flex;
+      flex-direction: column;
+    }
+
     .todo-item {
-      display:flex; align-items:center; gap:10px;
-      padding:9px 8px 9px 0; border-bottom:1px solid var(--b1);
-      position:relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 8px 9px 0;
+      border-bottom: 1px solid var(--b1);
+      position: relative;
     }
-    .todo-item:last-child { border-bottom:none; }
-    .todo-item.sub { padding-left:28px; }
+
+    .todo-item:last-child {
+      border-bottom: none;
+    }
+
+    .todo-item.sub {
+      padding-left: 28px;
+    }
+
     .todo-item.sub::before {
-      content:''; position:absolute; left:10px; top:0; bottom:50%;
-      width:1px; background:var(--b2);
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 50%;
+      width: 1px;
+      background: var(--b2);
     }
+
     .todo-item.sub::after {
-      content:''; position:absolute; left:10px; top:50%;
-      width:12px; height:1px; background:var(--b2);
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      width: 12px;
+      height: 1px;
+      background: var(--b2);
     }
-    .todo-color { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+    .todo-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
     .todo-check {
-      width:20px; height:20px; border-radius:6px; border:2px solid var(--b3);
-      display:flex; align-items:center; justify-content:center;
-      flex-shrink:0; font-size:12px; color:transparent; cursor:pointer;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: 2px solid var(--b3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: transparent;
+      cursor: pointer;
       transition: all .15s;
     }
-    .todo-check.done { background:var(--green); border-color:var(--green); color:#000; }
-    .todo-text { font-size:13px; flex:1; font-weight:500; }
-    .todo-text.done-text { text-decoration:line-through; color:var(--faint); }
+
+    .todo-check.done {
+      background: var(--green);
+      border-color: var(--green);
+      color: #000;
+    }
+
+    .todo-text {
+      font-size: 13px;
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .todo-text.done-text {
+      text-decoration: line-through;
+      color: var(--faint);
+    }
 
     /* ── COLOR PICKER ─────────────────────────────── */
-    .color-picker { display:flex; gap:10px; flex-wrap:wrap; }
+    .color-picker {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
     .color-dot {
-      width:28px; height:28px; border-radius:50%; border:2px solid transparent;
-      cursor:pointer; transition:all .15s; position:relative;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all .15s;
+      position: relative;
     }
+
     .color-dot.on {
-      border-color:#fff;
-      box-shadow:0 0 0 2px var(--bg), 0 0 12px rgba(255,255,255,.15);
-      transform:scale(1.15);
+      border-color: #fff;
+      box-shadow: 0 0 0 2px var(--bg), 0 0 12px rgba(255, 255, 255, .15);
+      transform: scale(1.15);
     }
+
     .color-dot.on::after {
-      content:'✓'; position:absolute; inset:0;
-      display:flex; align-items:center; justify-content:center;
-      font-size:12px; font-weight:900; color:#000;
+      content: '✓';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 900;
+      color: #000;
     }
 
     /* ── SUB-ITEM FORM ────────────────────────────── */
     .subitem-row {
-      display:flex; align-items:center; gap:8px;
-      padding:8px 0; border-bottom:1px solid var(--b1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--b1);
     }
-    .subitem-row:last-child { border-bottom:none; }
-    .sub-drag { font-size:14px; color:var(--faint); }
+
+    .subitem-row:last-child {
+      border-bottom: none;
+    }
+
+    .sub-drag {
+      font-size: 14px;
+      color: var(--faint);
+    }
+
     .sub-input {
-      flex:1; background:var(--s2); border:1px solid var(--b1); border-radius:8px;
-      padding:8px 12px; font-size:13px; color:var(--tx); font-family:var(--sans);
-      outline:none;
+      flex: 1;
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--tx);
+      font-family: var(--sans);
+      outline: none;
     }
-    .sub-input:focus { border-color:var(--ac); }
-    .sub-del { font-size:14px; color:var(--red); cursor:pointer; padding:4px; }
+
+    .sub-input:focus {
+      border-color: var(--ac);
+    }
+
+    .sub-del {
+      font-size: 14px;
+      color: var(--red);
+      cursor: pointer;
+      padding: 4px;
+    }
+
     .add-sub-btn {
-      display:flex; align-items:center; justify-content:center; gap:6px;
-      padding:10px; background:var(--s3); border:1px dashed var(--b2);
-      border-radius:var(--r); font-size:12px; font-weight:700; color:var(--ac2);
-      font-family:var(--sans); cursor:pointer; transition:background .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px;
+      background: var(--s3);
+      border: 1px dashed var(--b2);
+      border-radius: var(--r);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ac2);
+      font-family: var(--sans);
+      cursor: pointer;
+      transition: background .15s;
     }
-    .add-sub-btn:active { background:var(--s4); }
+
+    .add-sub-btn:active {
+      background: var(--s4);
+    }
 
     /* ── SECRET QUESTION ──────────────────────────── */
     .forgot-link {
-      font-size:12px; font-weight:700; color:var(--ac2);
-      cursor:pointer; padding:6px 14px; background:var(--acbg);
-      border-radius:8px; border:1px solid rgba(124,106,245,.2);
-      transition:background .15s;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ac2);
+      cursor: pointer;
+      padding: 6px 14px;
+      background: var(--acbg);
+      border-radius: 8px;
+      border: 1px solid rgba(124, 106, 245, .2);
+      transition: background .15s;
     }
-    .forgot-link:active { background:rgba(124,106,245,.22); }
+
+    .forgot-link:active {
+      background: rgba(124, 106, 245, .22);
+    }
 
     .sq-panel {
-      width:100%; max-width:300px;
-      background:var(--s2); border:1px solid var(--b2);
-      border-radius:var(--r2); padding:18px;
-      display:flex; flex-direction:column; gap:12px;
+      width: 100%;
+      max-width: 300px;
+      background: var(--s2);
+      border: 1px solid var(--b2);
+      border-radius: var(--r2);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
+
     .sq-panel-title {
-      font-size:14px; font-weight:700; text-align:center;
-      display:flex; align-items:center; justify-content:center; gap:8px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
+
     .sq-question {
-      font-size:13px; color:var(--amber); text-align:center;
-      font-weight:600; line-height:1.6;
-      padding:10px; background:var(--abg); border-radius:8px;
-      border:1px solid rgba(251,191,36,.15);
+      font-size: 13px;
+      color: var(--amber);
+      text-align: center;
+      font-weight: 600;
+      line-height: 1.6;
+      padding: 10px;
+      background: var(--abg);
+      border-radius: 8px;
+      border: 1px solid rgba(251, 191, 36, .15);
     }
+
     .sq-input {
-      width:100%; background:var(--s3); border:1px solid var(--b2);
-      border-radius:var(--r); padding:12px 14px; font-size:14px;
-      color:var(--tx); font-family:var(--sans); outline:none;
-      text-align:center; transition:border-color .2s;
+      width: 100%;
+      background: var(--s3);
+      border: 1px solid var(--b2);
+      border-radius: var(--r);
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--tx);
+      font-family: var(--sans);
+      outline: none;
+      text-align: center;
+      transition: border-color .2s;
     }
-    .sq-input:focus { border-color:var(--ac); }
-    .sq-input.shake { animation:dotshake .4s ease; }
+
+    .sq-input:focus {
+      border-color: var(--ac);
+    }
+
+    .sq-input.shake {
+      animation: dotshake .4s ease;
+    }
+
     .sq-btn {
-      width:100%; padding:12px; background:var(--ac); color:#fff;
-      border:none; border-radius:var(--r); font-size:13px; font-weight:700;
-      font-family:var(--sans); cursor:pointer; transition:opacity .15s;
+      width: 100%;
+      padding: 12px;
+      background: var(--ac);
+      color: #fff;
+      border: none;
+      border-radius: var(--r);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--sans);
+      cursor: pointer;
+      transition: opacity .15s;
     }
-    .sq-btn:active { opacity:.8; }
+
+    .sq-btn:active {
+      opacity: .8;
+    }
+
     .sq-back {
-      font-size:12px; color:var(--faint); text-align:center; cursor:pointer;
-      transition:color .15s;
+      font-size: 12px;
+      color: var(--faint);
+      text-align: center;
+      cursor: pointer;
+      transition: color .15s;
     }
-    .sq-back:hover { color:var(--ac2); }
+
+    .sq-back:hover {
+      color: var(--ac2);
+    }
+
     .sq-set-card {
-      background:var(--s2); border:1px solid var(--b2);
-      border-radius:var(--r); overflow:hidden;
+      background: var(--s2);
+      border: 1px solid var(--b2);
+      border-radius: var(--r);
+      overflow: hidden;
     }
+
     .sq-set-row {
-      display:flex; align-items:center; gap:12px; padding:14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
     }
+
     .sq-set-ico {
-      width:36px; height:36px; border-radius:9px;
-      background:var(--abg); display:flex; align-items:center;
-      justify-content:center; font-size:18px; flex-shrink:0;
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: var(--abg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
     }
-    .sq-set-info { flex:1; min-width:0; }
-    .sq-set-name { font-size:13px; font-weight:600; }
-    .sq-set-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+
+    .sq-set-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sq-set-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .sq-set-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
     .step-badge {
-      font-size:10px; font-weight:800; padding:3px 12px;
-      border-radius:99px; background:var(--acbg); color:var(--ac2);
-      border:1px solid rgba(124,106,245,.25); letter-spacing:.5px;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 12px;
+      border-radius: 99px;
+      background: var(--acbg);
+      color: var(--ac2);
+      border: 1px solid rgba(124, 106, 245, .25);
+      letter-spacing: .5px;
     }
+
     select.fi {
-      -webkit-appearance:none; appearance:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23737891' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-      background-repeat:no-repeat; background-position:right 14px center;
-      padding-right:36px; cursor:pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23737891' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+      cursor: pointer;
     }
 
     /* sort */
@@ -1696,7 +1984,7 @@
       font-weight: 300;
       color: #fff;
       cursor: pointer;
-      box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 0 rgba(124,106,245,.2);
+      box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 0 rgba(124, 106, 245, .2);
       z-index: 50;
       transition: transform .15s, box-shadow .15s;
     }
@@ -1796,6 +2084,104 @@
       flex-shrink: 0;
     }
 
+    /* ── TYPE GRID (2×2) ────────────────────────── */
+    .type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .tcard {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px;
+      background: var(--s2);
+      border: 1.5px solid var(--b2);
+      border-radius: var(--r);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .tci { font-size: 18px; }
+    .tcard.on {
+      background: var(--acbg);
+      border-color: var(--ac);
+      color: var(--ac2);
+      box-shadow: 0 0 0 1px rgba(124,106,245,.15);
+    }
+    .divider {
+      height: 1px;
+      background: var(--b1);
+      margin: 4px 0;
+    }
+
+    /* ── SECURITY GROUP ─────────────────────────── */
+    .set-group {
+      background: var(--s1);
+      border: 1px solid var(--b1);
+      border-radius: var(--r2);
+      overflow: hidden;
+    }
+    .set-group-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .set-group-row:not(:last-child) {
+      border-bottom: 1px solid var(--b1);
+    }
+    .set-group-row:active {
+      background: var(--s2);
+    }
+    .set-group-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .set-group-ico {
+      font-size: 18px;
+      width: 28px;
+      text-align: center;
+    }
+    .set-group-name {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .set-group-arrow {
+      font-size: 14px;
+      color: var(--faint);
+    }
+
+    /* ── DATA BUTTON ROW ────────────────────────── */
+    .data-btn-row {
+      display: flex;
+      gap: 8px;
+    }
+    .data-btn {
+      flex: 1;
+      padding: 11px 8px;
+      background: transparent;
+      border: 1px solid var(--b2);
+      border-radius: var(--r);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      font-family: var(--sans);
+      cursor: pointer;
+      text-align: center;
+      transition: all .15s;
+    }
+    .data-btn:active {
+      background: var(--s2);
+      border-color: var(--ac);
+      color: var(--ac2);
+    }
+
     /* ── FORM ────────────────────────────────────── */
     .fg {
       display: flex;
@@ -1821,12 +2207,13 @@
       font-family: var(--sans);
       width: 100%;
       outline: none;
-      transition: border-color .2s;
+      transition: border-color .2s, box-shadow .2s;
       -webkit-appearance: none;
     }
 
     .fi:focus {
       border-color: var(--ac);
+      box-shadow: 0 0 0 2px rgba(124, 106, 245, .12);
     }
 
     .fi.mono {
@@ -2035,7 +2422,9 @@
     <div class="lock-glyph">🔐</div>
     <div style="text-align:center">
       <div class="lock-wm">Vault</div>
-      <div style="width:40px;height:2px;background:linear-gradient(90deg,transparent,var(--ac),transparent);margin:10px auto 8px;border-radius:2px"></div>
+      <div
+        style="width:40px;height:2px;background:linear-gradient(90deg,transparent,var(--ac),transparent);margin:10px auto 8px;border-radius:2px">
+      </div>
       <div class="lock-sub" style="margin-top:0">AES-256 · End-to-End Encrypted</div>
     </div>
 
@@ -2046,9 +2435,12 @@
       <div class="lb-timer" id="lb-timer">10:00</div>
       <div class="lb-sub">Vault locked for security</div>
       <div id="lb-sq-section" style="display:none;width:100%;max-width:300px;margin-top:6px">
-        <div style="font-size:11px;font-weight:600;color:var(--faint);letter-spacing:.3px;text-transform:uppercase;text-align:center;margin-bottom:8px">Answer your secret question to unlock</div>
+        <div
+          style="font-size:11px;font-weight:600;color:var(--faint);letter-spacing:.3px;text-transform:uppercase;text-align:center;margin-bottom:8px">
+          Answer your secret question to unlock</div>
         <div class="sq-question" id="lb-sq-q" style="font-size:12px;padding:8px;margin-bottom:8px"></div>
-        <input class="sq-input" id="lb-sq-ans" placeholder="Your answer…" style="font-size:13px;padding:10px;margin-bottom:8px" onkeydown="if(event.key==='Enter')sqLockoutUnlock()">
+        <input class="sq-input" id="lb-sq-ans" placeholder="Your answer…"
+          style="font-size:13px;padding:10px;margin-bottom:8px" onkeydown="if(event.key==='Enter')sqLockoutUnlock()">
         <button class="sq-btn" style="padding:10px;font-size:12px" onclick="sqLockoutUnlock()">Verify & Unlock</button>
       </div>
     </div>
@@ -2091,18 +2483,22 @@
       <div class="sq-panel">
         <div class="sq-panel-title">🔑 Secret Question</div>
         <div class="sq-question" id="sq-rec-q"></div>
-        <input class="sq-input" id="sq-rec-ans" placeholder="Your answer…" onkeydown="if(event.key==='Enter')verifySQAnswer()">
-        <div class="lock-error" id="sq-rec-err" style="font-size:13px;color:var(--red);min-height:16px;font-weight:600;text-align:center"></div>
+        <input class="sq-input" id="sq-rec-ans" placeholder="Your answer…"
+          onkeydown="if(event.key==='Enter')verifySQAnswer()">
+        <div class="lock-error" id="sq-rec-err"
+          style="font-size:13px;color:var(--red);min-height:16px;font-weight:600;text-align:center"></div>
         <button class="sq-btn" onclick="verifySQAnswer()">Verify Answer</button>
       </div>
       <div class="sq-back" onclick="backToPin()">← Back to PIN entry</div>
     </div>
 
     <!-- Secret Question setup panel (first-time) -->
-    <div id="sq-setup" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:340px">
+    <div id="sq-setup"
+      style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:340px">
       <div class="lock-glyph" style="width:60px;height:60px;font-size:28px">🛡️</div>
       <div style="font-size:17px;font-weight:700">Recovery Setup</div>
-      <div class="lock-sub" style="max-width:260px">Set a secret question to recover your vault if you forget your PIN</div>
+      <div class="lock-sub" style="max-width:260px">Set a secret question to recover your vault if you forget your PIN
+      </div>
       <div class="step-badge">STEP 2 of 2</div>
       <div class="fg" style="width:100%">
         <div class="fl">Secret Question</div>
@@ -2123,7 +2519,8 @@
       </div>
       <div class="fg" style="width:100%">
         <div class="fl">Your Answer *</div>
-        <input class="fi" id="sq-setup-answer" placeholder="Type your answer…" onkeydown="if(event.key==='Enter')saveSQFromSetup()">
+        <input class="fi" id="sq-setup-answer" placeholder="Type your answer…"
+          onkeydown="if(event.key==='Enter')saveSQFromSetup()">
         <div style="font-size:10px;color:var(--faint)">Answer is case-insensitive</div>
       </div>
       <button class="btn primary" style="width:100%" onclick="saveSQFromSetup()">Complete Setup</button>
@@ -2229,54 +2626,45 @@
 
     <div class="set-sec">
       <div class="set-lbl">Import / Export</div>
-      <div class="set-row">
-        <div>
-          <div class="set-rn">Export JSON Backup</div>
-          <div class="set-rs">Encrypted vault file you can restore from</div>
-        </div>
-        <div class="set-act" onclick="exportJSON()">Export</div>
-      </div>
-      <div class="set-row">
-        <div>
-          <div class="set-rn">Export CSV</div>
-          <div class="set-rs">Spreadsheet view (passwords excluded)</div>
-        </div>
-        <div class="set-act" onclick="exportCSV()">CSV</div>
-      </div>
-      <div class="set-row">
-        <div>
-          <div class="set-rn">Import from File</div>
-          <div class="set-rs">Restore from JSON backup</div>
-        </div>
-        <div class="set-act" onclick="pickImport()">Import</div>
+      <div class="data-btn-row">
+        <button class="data-btn" onclick="exportJSON()">📦 Export JSON</button>
+        <button class="data-btn" onclick="exportCSV()">📄 Export CSV</button>
+        <button class="data-btn" onclick="pickImport()">📥 Import</button>
       </div>
       <input type="file" id="imp-file" accept=".json" style="display:none" onchange="doImport(event)">
     </div>
 
     <div class="set-sec">
       <div class="set-lbl">Security</div>
-      <div class="fg" style="margin-bottom:12px">
+      <div class="set-group">
+        <div class="set-group-row" onclick="document.getElementById('new-pw').focus()">
+          <div class="set-group-left">
+            <span class="set-group-ico">🔒</span>
+            <span class="set-group-name">Change PIN</span>
+          </div>
+          <span class="set-group-arrow">›</span>
+        </div>
+        <div class="set-group-row" onclick="lockVault()">
+          <div class="set-group-left">
+            <span class="set-group-ico">🔐</span>
+            <span class="set-group-name">Lock Vault</span>
+          </div>
+          <span class="set-group-arrow">›</span>
+        </div>
+        <div class="set-group-row" onclick="clearAll()">
+          <div class="set-group-left">
+            <span class="set-group-ico">⚠️</span>
+            <span class="set-group-name" style="color:var(--red)">Wipe All Data</span>
+          </div>
+          <span class="set-group-arrow" style="color:var(--red)">›</span>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:14px">
         <div class="fl">New Master Password</div>
         <input id="new-pw" class="fi mono" type="password" placeholder="Enter new password…"
           autocomplete="new-password">
       </div>
-      <button class="btn primary" onclick="changeMasterPw()" style="padding:12px">Update Password</button>
-      <div style="margin-top:12px">
-        <div class="set-row" style="padding-top:12px">
-          <div>
-            <div class="set-rn">Lock Vault</div>
-            <div class="set-rs">Require password to re-enter</div>
-          </div>
-          <div class="set-act" onclick="lockVault()">Lock Now</div>
-        </div>
-        <div class="set-row">
-          <div>
-            <div class="set-rn">Wipe All Data</div>
-            <div class="set-rs">Permanently delete everything</div>
-          </div>
-          <div class="set-act dng" onclick="clearAll()">Wipe</div>
-        </div>
-      </div>
+      <button class="btn primary" onclick="changeMasterPw()" style="padding:12px;margin-top:8px">Update Password</button>
     </div>
 
   </div><!-- /settings -->

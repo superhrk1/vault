@@ -1018,7 +1018,7 @@
       background: var(--abg);
     }
 
-    .is {
+    .it {
       background: var(--gbg);
     }
 
@@ -1434,58 +1434,163 @@
       border-color: rgba(248, 113, 113, .2);
     }
 
-    /* generator */
-    .gen-out {
+    /* ── TODO CARD ──────────────────────────────── */
+    .todo-card { border-left: 3px solid var(--ac); }
+    .todo-card.color-red    { border-left-color: #f87171; }
+    .todo-card.color-orange { border-left-color: #fb923c; }
+    .todo-card.color-amber  { border-left-color: #fbbf24; }
+    .todo-card.color-green  { border-left-color: #4ade80; }
+    .todo-card.color-teal   { border-left-color: #2dd4bf; }
+    .todo-card.color-blue   { border-left-color: #60a5fa; }
+    .todo-card.color-purple { border-left-color: #7c6af5; }
+    .todo-card.color-pink   { border-left-color: #f472b6; }
+
+    .todo-detail {
+      border-top: 1px solid var(--b1);
       background: var(--s2);
-      border: 1px solid var(--b2);
-      border-radius: var(--r);
-      padding: 14px;
-      font-family: var(--mono);
-      font-size: 15px;
-      color: var(--cyan);
-      word-break: break-all;
-      min-height: 50px;
-      line-height: 1.5;
-      margin-bottom: 10px;
+      padding: 12px 14px;
     }
 
-    .gen-opts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 10px;
-    }
+    .todo-progress { display:flex; align-items:center; gap:8px; padding:8px 0 6px; }
+    .todo-prog-bar { flex:1; height:4px; border-radius:99px; background:var(--s3); overflow:hidden; }
+    .todo-prog-fill { height:100%; border-radius:99px; background:var(--green); transition:width .3s; }
+    .todo-prog-label { font-size:11px; color:var(--muted); font-weight:700; white-space:nowrap; }
 
-    .gen-opt {
-      padding: 6px 12px;
-      background: var(--s3);
-      border: 1px solid var(--b1);
-      border-radius: 99px;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--muted);
-      cursor: pointer;
-      font-family: var(--sans);
+    .todo-tree { display:flex; flex-direction:column; }
+    .todo-item {
+      display:flex; align-items:center; gap:10px;
+      padding:9px 8px 9px 0; border-bottom:1px solid var(--b1);
+      position:relative;
+    }
+    .todo-item:last-child { border-bottom:none; }
+    .todo-item.sub { padding-left:28px; }
+    .todo-item.sub::before {
+      content:''; position:absolute; left:10px; top:0; bottom:50%;
+      width:1px; background:var(--b2);
+    }
+    .todo-item.sub::after {
+      content:''; position:absolute; left:10px; top:50%;
+      width:12px; height:1px; background:var(--b2);
+    }
+    .todo-color { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .todo-check {
+      width:20px; height:20px; border-radius:6px; border:2px solid var(--b3);
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; font-size:12px; color:transparent; cursor:pointer;
       transition: all .15s;
     }
+    .todo-check.done { background:var(--green); border-color:var(--green); color:#000; }
+    .todo-text { font-size:13px; flex:1; font-weight:500; }
+    .todo-text.done-text { text-decoration:line-through; color:var(--faint); }
 
-    .gen-opt.on {
-      background: var(--acbg);
-      border-color: var(--ac);
-      color: var(--ac2);
+    /* ── COLOR PICKER ─────────────────────────────── */
+    .color-picker { display:flex; gap:10px; flex-wrap:wrap; }
+    .color-dot {
+      width:28px; height:28px; border-radius:50%; border:2px solid transparent;
+      cursor:pointer; transition:all .15s; position:relative;
+    }
+    .color-dot.on {
+      border-color:#fff;
+      box-shadow:0 0 0 2px var(--bg), 0 0 12px rgba(255,255,255,.15);
+      transform:scale(1.15);
+    }
+    .color-dot.on::after {
+      content:'✓'; position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; font-weight:900; color:#000;
     }
 
-    .len-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
+    /* ── SUB-ITEM FORM ────────────────────────────── */
+    .subitem-row {
+      display:flex; align-items:center; gap:8px;
+      padding:8px 0; border-bottom:1px solid var(--b1);
     }
+    .subitem-row:last-child { border-bottom:none; }
+    .sub-drag { font-size:14px; color:var(--faint); }
+    .sub-input {
+      flex:1; background:var(--s2); border:1px solid var(--b1); border-radius:8px;
+      padding:8px 12px; font-size:13px; color:var(--tx); font-family:var(--sans);
+      outline:none;
+    }
+    .sub-input:focus { border-color:var(--ac); }
+    .sub-del { font-size:14px; color:var(--red); cursor:pointer; padding:4px; }
+    .add-sub-btn {
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      padding:10px; background:var(--s3); border:1px dashed var(--b2);
+      border-radius:var(--r); font-size:12px; font-weight:700; color:var(--ac2);
+      font-family:var(--sans); cursor:pointer; transition:background .15s;
+    }
+    .add-sub-btn:active { background:var(--s4); }
 
-    .len-lbl {
-      font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
+    /* ── SECRET QUESTION ──────────────────────────── */
+    .forgot-link {
+      font-size:12px; font-weight:700; color:var(--ac2);
+      cursor:pointer; padding:6px 14px; background:var(--acbg);
+      border-radius:8px; border:1px solid rgba(124,106,245,.2);
+      transition:background .15s;
+    }
+    .forgot-link:active { background:rgba(124,106,245,.22); }
+
+    .sq-panel {
+      width:100%; max-width:300px;
+      background:var(--s2); border:1px solid var(--b2);
+      border-radius:var(--r2); padding:18px;
+      display:flex; flex-direction:column; gap:12px;
+    }
+    .sq-panel-title {
+      font-size:14px; font-weight:700; text-align:center;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .sq-question {
+      font-size:13px; color:var(--amber); text-align:center;
+      font-weight:600; line-height:1.6;
+      padding:10px; background:var(--abg); border-radius:8px;
+      border:1px solid rgba(251,191,36,.15);
+    }
+    .sq-input {
+      width:100%; background:var(--s3); border:1px solid var(--b2);
+      border-radius:var(--r); padding:12px 14px; font-size:14px;
+      color:var(--tx); font-family:var(--sans); outline:none;
+      text-align:center; transition:border-color .2s;
+    }
+    .sq-input:focus { border-color:var(--ac); }
+    .sq-input.shake { animation:dotshake .4s ease; }
+    .sq-btn {
+      width:100%; padding:12px; background:var(--ac); color:#fff;
+      border:none; border-radius:var(--r); font-size:13px; font-weight:700;
+      font-family:var(--sans); cursor:pointer; transition:opacity .15s;
+    }
+    .sq-btn:active { opacity:.8; }
+    .sq-back {
+      font-size:12px; color:var(--faint); text-align:center; cursor:pointer;
+      transition:color .15s;
+    }
+    .sq-back:hover { color:var(--ac2); }
+    .sq-set-card {
+      background:var(--s2); border:1px solid var(--b2);
+      border-radius:var(--r); overflow:hidden;
+    }
+    .sq-set-row {
+      display:flex; align-items:center; gap:12px; padding:14px;
+    }
+    .sq-set-ico {
+      width:36px; height:36px; border-radius:9px;
+      background:var(--abg); display:flex; align-items:center;
+      justify-content:center; font-size:18px; flex-shrink:0;
+    }
+    .sq-set-info { flex:1; min-width:0; }
+    .sq-set-name { font-size:13px; font-weight:600; }
+    .sq-set-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+    .step-badge {
+      font-size:10px; font-weight:800; padding:3px 12px;
+      border-radius:99px; background:var(--acbg); color:var(--ac2);
+      border:1px solid rgba(124,106,245,.25); letter-spacing:.5px;
+    }
+    select.fi {
+      -webkit-appearance:none; appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23737891' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 14px center;
+      padding-right:36px; cursor:pointer;
     }
 
     /* sort */
@@ -1911,11 +2016,11 @@
       <div class="lb-title">Too many failed attempts</div>
       <div class="lb-timer" id="lb-timer">10:00</div>
       <div class="lb-sub">Vault locked for security</div>
-      <div class="lb-pw-wrap">
-        <div class="fl">Or unlock with master password</div>
-        <input class="lb-pw-input" id="lb-pw" type="password" placeholder="Enter master password…"
-          onkeydown="if(event.key==='Enter')masterPwUnlock()">
-        <button class="lb-pw-btn" onclick="masterPwUnlock()">Unlock</button>
+      <div id="lb-sq-section" style="display:none;width:100%;max-width:300px;margin-top:6px">
+        <div style="font-size:11px;font-weight:600;color:var(--faint);letter-spacing:.3px;text-transform:uppercase;text-align:center;margin-bottom:8px">Answer your secret question to unlock</div>
+        <div class="sq-question" id="lb-sq-q" style="font-size:12px;padding:8px;margin-bottom:8px"></div>
+        <input class="sq-input" id="lb-sq-ans" placeholder="Your answer…" style="font-size:13px;padding:10px;margin-bottom:8px" onkeydown="if(event.key==='Enter')sqLockoutUnlock()">
+        <button class="sq-btn" style="padding:10px;font-size:12px" onclick="sqLockoutUnlock()">Verify & Unlock</button>
       </div>
     </div>
 
@@ -1942,6 +2047,58 @@
         <div class="nk" onclick="numpadPress('0')">0</div>
         <div class="nk nk-submit dim" id="nk-submit" onclick="handlePinSubmit()">✓</div>
       </div>
+    </div>
+
+    <!-- Forgot PIN link -->
+    <div id="forgot-link" style="display:none;margin-top:4px">
+      <span class="forgot-link" onclick="showForgotPIN()">🔑 Forgot PIN?</span>
+    </div>
+
+    <!-- Secret Question recovery panel -->
+    <div id="sq-recovery" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%">
+      <div class="lock-glyph" style="width:60px;height:60px;font-size:28px">🛡️</div>
+      <div style="font-size:17px;font-weight:700">Recovery</div>
+      <div class="lock-sub">Answer your secret question</div>
+      <div class="sq-panel">
+        <div class="sq-panel-title">🔑 Secret Question</div>
+        <div class="sq-question" id="sq-rec-q"></div>
+        <input class="sq-input" id="sq-rec-ans" placeholder="Your answer…" onkeydown="if(event.key==='Enter')verifySQAnswer()">
+        <div class="lock-error" id="sq-rec-err" style="font-size:13px;color:var(--red);min-height:16px;font-weight:600;text-align:center"></div>
+        <button class="sq-btn" onclick="verifySQAnswer()">Verify Answer</button>
+      </div>
+      <div class="sq-back" onclick="backToPin()">← Back to PIN entry</div>
+    </div>
+
+    <!-- Secret Question setup panel (first-time) -->
+    <div id="sq-setup" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:340px">
+      <div class="lock-glyph" style="width:60px;height:60px;font-size:28px">🛡️</div>
+      <div style="font-size:17px;font-weight:700">Recovery Setup</div>
+      <div class="lock-sub" style="max-width:260px">Set a secret question to recover your vault if you forget your PIN</div>
+      <div class="step-badge">STEP 2 of 2</div>
+      <div class="fg" style="width:100%">
+        <div class="fl">Secret Question</div>
+        <select class="fi" id="sq-setup-preset" onchange="onSQPresetChange()">
+          <option value="">— Select a question —</option>
+          <option>What is your pet's name?</option>
+          <option>What city were you born in?</option>
+          <option>What is your mother's maiden name?</option>
+          <option>What was your first car?</option>
+          <option>What is your favorite movie?</option>
+          <option>What school did you first attend?</option>
+          <option value="__custom__">✏️ Write my own question…</option>
+        </select>
+      </div>
+      <div class="fg" id="sq-custom-wrap" style="width:100%;display:none">
+        <div class="fl">Your Custom Question</div>
+        <input class="fi" id="sq-setup-custom" placeholder="Type your question…">
+      </div>
+      <div class="fg" style="width:100%">
+        <div class="fl">Your Answer *</div>
+        <input class="fi" id="sq-setup-answer" placeholder="Type your answer…" onkeydown="if(event.key==='Enter')saveSQFromSetup()">
+        <div style="font-size:10px;color:var(--faint)">Answer is case-insensitive</div>
+      </div>
+      <button class="btn primary" style="width:100%" onclick="saveSQFromSetup()">Complete Setup</button>
+      <div class="sq-back" onclick="skipSQSetup()">Skip for now</div>
     </div>
 
     <!-- Biometric unlock -->
@@ -1982,9 +2139,9 @@
   <div id="tabs">
     <div class="tab on" onclick="switchTab(this,'all')">All</div>
     <div class="tab" onclick="switchTab(this,'password')">Passwords</div>
-    <div class="tab" onclick="switchTab(this,'subscription')">Subs</div>
     <div class="tab" onclick="switchTab(this,'bookmark')">Links</div>
     <div class="tab" onclick="switchTab(this,'note')">Notes</div>
+    <div class="tab" onclick="switchTab(this,'todo')">Todos</div>
   </div>
 
   <!-- ─── SEARCH ───────────────────────────────────────── -->
@@ -2024,24 +2181,9 @@
       <div id="drive-panel"></div>
     </div>
 
-    <div class="set-sec">
-      <div class="set-lbl">Password Generator</div>
-      <div class="gen-out" id="gen-out">Tap Generate</div>
-      <div class="gen-opts">
-        <div class="gen-opt on" onclick="genToggle('upper',this)">A–Z</div>
-        <div class="gen-opt on" onclick="genToggle('lower',this)">a–z</div>
-        <div class="gen-opt on" onclick="genToggle('num',this)">0–9</div>
-        <div class="gen-opt on" onclick="genToggle('sym',this)">!@#</div>
-      </div>
-      <div class="len-row">
-        <span class="len-lbl">Length: <b id="gen-len-val">20</b></span>
-        <input type="range" min="8" max="64" value="20" id="gen-len" oninput="$('gen-len-val').textContent=this.value"
-          style="flex:1">
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn primary" onclick="genPassword()" style="padding:11px">Generate</button>
-        <button class="btn ghost" onclick="copyGenPw()" style="padding:11px">Copy</button>
-      </div>
+    <div class="set-sec" id="sq-settings">
+      <div class="set-lbl">Secret Question</div>
+      <div id="sq-settings-panel"></div>
     </div>
 
     <div class="set-sec">

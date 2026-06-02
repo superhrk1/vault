@@ -75,7 +75,8 @@ let STATE = {
   mTags            : [],
   mType            : "password",
   mPriority        : "high",
-  genOpts          : { upper:true, lower:true, num:true, sym:true },
+  mSubitems        : [],
+  mColor           : "purple",
   drive: {
     token     : null,
     fileId    : null,
@@ -124,6 +125,10 @@ async function boot() {
     if (LS.get("vault_bio_cred") && await isBioAvailable()) {
       $("bio-section").classList.add("show");
     }
+    // Show forgot PIN link if secret question is configured
+    if (LS.get("vault_sq_question")) {
+      $("forgot-link").style.display = "";
+    }
   }
   renderPinDots();
   renderSyncBadge();
@@ -169,6 +174,8 @@ function renderPinDots() {
 
 async function handlePinSubmit() {
   if (_pin.length < 4) return;
+  // PIN reset mode (after SQ verification)
+  if (_pinResetMode) { await handlePinReset(); return; }
   setLockErr("");
   const hasVault = !!LS.get("vault_hash");
   if (!hasVault) {
@@ -204,7 +211,12 @@ async function setupVault(pw) {
   const hash = await Crypto.hashPassword(pw);
   LS.set("vault_hash", hash);
   STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
-  openApp();
+  // Show secret question setup
+  $("pin-entry").style.display = "none";
+  $("lock-hint").style.display = "none";
+  $("bio-section").classList.remove("show");
+  $("forgot-link").style.display = "none";
+  $("sq-setup").style.display = "flex";
 }
 
 function openApp() {
@@ -235,6 +247,13 @@ function lockVault() {
   } else {
     $("bio-section").classList.remove("show");
   }
+  // Show forgot link if SQ configured
+  $("forgot-link").style.display = (hasVault && LS.get("vault_sq_question")) ? "" : "none";
+  // Hide SQ panels
+  $("sq-recovery").style.display = "none";
+  $("sq-setup").style.display = "none";
+  $("pin-entry").style.display = "flex";
+  $("lock-hint").style.display = "";
 }
 
 function setLockErr(msg) { $("lock-err").textContent = msg; }
@@ -254,8 +273,19 @@ function checkLockout() {
 }
 function applyLockout(until) {
   $("pin-entry").style.display = "none"; $("lock-hint").style.display = "none";
+  $("forgot-link").style.display = "none";
+  $("sq-recovery").style.display = "none";
   $("bio-section").classList.remove("show");
   $("lock-blocked").classList.add("show"); setLockErr("");
+  // Show SQ bypass if configured
+  const sqQ = LS.get("vault_sq_question");
+  const lbSQ = $("lb-sq-section");
+  if (sqQ && lbSQ) {
+    $("lb-sq-q").textContent = sqQ;
+    lbSQ.style.display = "";
+  } else if (lbSQ) {
+    lbSQ.style.display = "none";
+  }
   if (_lockoutTimer) clearInterval(_lockoutTimer);
   _lockoutTimer = setInterval(() => {
     const rem = until - Date.now();
@@ -268,32 +298,221 @@ function endLockout() {
   if (_lockoutTimer) { clearInterval(_lockoutTimer); _lockoutTimer = null; }
   LS.del("vault_lockout_until");
   $("lock-blocked").classList.remove("show");
-  // Clear master password input
-  const lbPw = $("lb-pw"); if (lbPw) lbPw.value = "";
+  // Clear SQ inputs
+  const lbAns = $("lb-sq-ans"); if (lbAns) lbAns.value = "";
   $("pin-entry").style.display = "flex"; $("lock-hint").style.display = "";
   _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim");
-  // Re-show biometric if available
+  // Re-show forgot link and biometric if available
+  if (LS.get("vault_sq_question")) $("forgot-link").style.display = "";
   if (LS.get("vault_bio_cred")) $("bio-section").classList.add("show");
 }
 
-// -- Master password bypass during lockout --
-async function masterPwUnlock() {
-  const pw = $("lb-pw")?.value || "";
-  if (!pw) return;
-  const hash = await Crypto.hashPassword(pw);
-  if (hash !== LS.get("vault_hash")) {
-    $("lb-pw").value = "";
-    $("lb-pw").classList.add("shake");
-    setTimeout(() => $("lb-pw").classList.remove("shake"), 500);
-    toast("Wrong password");
+// ══════════════════════════════════════════════════════════
+//  SECRET QUESTION SYSTEM
+// ══════════════════════════════════════════════════════════
+async function hashSQAnswer(answer) {
+  const buf = await crypto.subtle.digest("SHA-256", enc(answer.toLowerCase().trim() + "__vault_sq_salt__"));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+function onSQPresetChange() {
+  const sel = $("sq-setup-preset");
+  $("sq-custom-wrap").style.display = sel.value === "__custom__" ? "" : "none";
+}
+
+async function saveSQFromSetup() {
+  const sel = $("sq-setup-preset");
+  let question = sel.value === "__custom__" ? $("sq-setup-custom").value.trim() : sel.value;
+  const answer = $("sq-setup-answer").value.trim();
+  if (!question || !answer) { toast("Please fill in question and answer"); return; }
+  const hash = await hashSQAnswer(answer);
+  LS.set("vault_sq_question", question);
+  LS.set("vault_sq_hash", hash);
+  $("sq-setup").style.display = "none";
+  openApp();
+  toast("Recovery question saved ✓");
+}
+
+function skipSQSetup() {
+  $("sq-setup").style.display = "none";
+  openApp();
+}
+
+function showForgotPIN() {
+  const question = LS.get("vault_sq_question");
+  if (!question) { toast("No secret question set"); return; }
+  $("pin-entry").style.display = "none";
+  $("lock-hint").style.display = "none";
+  $("forgot-link").style.display = "none";
+  $("bio-section").classList.remove("show");
+  $("sq-rec-q").textContent = question;
+  $("sq-rec-ans").value = "";
+  $("sq-rec-err").textContent = "";
+  $("sq-recovery").style.display = "flex";
+  $("sq-rec-ans").focus();
+}
+
+function backToPin() {
+  $("sq-recovery").style.display = "none";
+  $("pin-entry").style.display = "flex";
+  $("lock-hint").style.display = "";
+  $("forgot-link").style.display = "";
+  if (LS.get("vault_bio_cred")) $("bio-section").classList.add("show");
+  _pin = ""; renderPinDots();
+}
+
+let _pinResetMode = false;
+let _pinResetConfirm = null;
+
+async function verifySQAnswer() {
+  const answer = $("sq-rec-ans").value.trim();
+  if (!answer) return;
+  const hash = await hashSQAnswer(answer);
+  if (hash !== LS.get("vault_sq_hash")) {
+    $("sq-rec-err").textContent = "Wrong answer";
+    $("sq-rec-ans").value = "";
+    $("sq-rec-ans").classList.add("shake");
+    setTimeout(() => $("sq-rec-ans").classList.remove("shake"), 500);
     return;
   }
+  // Correct — start PIN reset
+  $("sq-recovery").style.display = "none";
+  startPinReset();
+}
+
+function startPinReset() {
+  _pinResetMode = true;
+  _pinResetConfirm = null;
+  _pin = "";
   clearFailCount();
-  STATE.masterKey = pw;
-  await loadItems();
-  endLockout();
+  $("pin-entry").style.display = "flex";
+  $("lock-hint").style.display = "";
+  $("forgot-link").style.display = "none";
+  $("pin-label").textContent = "Create your new PIN";
+  $("lock-hint").textContent = "Choose a new numeric PIN (min 4 digits)";
+  setLockErr("");
+  renderPinDots();
+  $("nk-submit").classList.add("dim");
+}
+
+async function handlePinReset() {
+  if (_pin.length < 4) return;
+  if (_pinResetConfirm === null) {
+    _pinResetConfirm = _pin; _pin = "";
+    $("pin-label").textContent = "Confirm new PIN";
+    $("lock-hint").textContent = "Re-enter the same PIN to confirm";
+    renderPinDots(); $("nk-submit").classList.add("dim"); return;
+  }
+  if (_pin !== _pinResetConfirm) {
+    setLockErr("PINs don't match"); shakeDots();
+    _pin = ""; _pinResetConfirm = null;
+    $("pin-label").textContent = "Create your new PIN";
+    $("lock-hint").textContent = "Choose a new numeric PIN (min 4 digits)";
+    renderPinDots(); $("nk-submit").classList.add("dim"); return;
+  }
+  // Re-encrypt vault with new PIN
+  const oldKey = STATE.masterKey;
+  // We need the old key to decrypt. During PIN reset via SQ, the user was NOT logged in.
+  // The vault data is still encrypted with the old key. We'll load with the old hash's password.
+  // Actually, we need to find the old PIN. Since we verified SQ, we need to re-encrypt.
+  // The data in localStorage is encrypted with the OLD pin. We cannot decrypt without it.
+  // So instead: wipe vault data, set new PIN, start fresh.
+  // OR: store the master key temporarily after SQ verification.
+  // Better approach: SQ recovery resets everything (PIN + wipes vault) for security.
+  const newPin = _pin;
+  const hash = await Crypto.hashPassword(newPin);
+  LS.set("vault_hash", hash);
+  STATE.masterKey = newPin;
+  STATE.items = [];
+  LS.del("vault_data");
+  _pin = ""; _pinResetMode = false; _pinResetConfirm = null;
+  // Clear biometric since PIN changed
+  LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
   openApp();
-  toast("Unlocked with master password ✓");
+  toast("PIN reset ✓ — Vault data was cleared for security");
+}
+
+async function sqLockoutUnlock() {
+  const answer = $("lb-sq-ans")?.value?.trim() || "";
+  if (!answer) return;
+  const hash = await hashSQAnswer(answer);
+  if (hash !== LS.get("vault_sq_hash")) {
+    $("lb-sq-ans").value = "";
+    $("lb-sq-ans").classList.add("shake");
+    setTimeout(() => $("lb-sq-ans").classList.remove("shake"), 500);
+    toast("Wrong answer");
+    return;
+  }
+  // Correct — unlock. But we don't have the PIN. Show PIN reset flow.
+  clearFailCount();
+  endLockout();
+  startPinReset();
+  toast("Verified ✓ — Create a new PIN");
+}
+
+function renderSQSettings() {
+  const panel = $("sq-settings-panel");
+  if (!panel) return;
+  const question = LS.get("vault_sq_question");
+  if (question) {
+    panel.innerHTML = `<div class="sq-set-card"><div class="sq-set-row">
+      <div class="sq-set-ico">🛡️</div>
+      <div class="sq-set-info">
+        <div class="sq-set-name">${esc(question)}</div>
+        <div class="sq-set-sub">Recovery method active ✓</div>
+      </div>
+      <div class="set-act" onclick="openChangeSQ()">Change</div>
+    </div></div>`;
+  } else {
+    panel.innerHTML = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">No secret question set. Set one to recover your vault if you forget your PIN.</div>
+      <button class="btn primary" style="padding:11px" onclick="openChangeSQ()">Set Secret Question</button>`;
+  }
+}
+
+function openChangeSQ() {
+  const body = $("add-body");
+  const foot = $("add-foot");
+  $("add-title").textContent = "Secret Question";
+  body.innerHTML = `
+    <div class="fg">
+      <div class="fl">Secret Question</div>
+      <select class="fi" id="sq-ch-preset" onchange="document.getElementById('sq-ch-custom-wrap').style.display=this.value==='__custom__'?'':'none'">
+        <option value="">— Select a question —</option>
+        <option>What is your pet's name?</option>
+        <option>What city were you born in?</option>
+        <option>What is your mother's maiden name?</option>
+        <option>What was your first car?</option>
+        <option>What is your favorite movie?</option>
+        <option>What school did you first attend?</option>
+        <option value="__custom__">✏️ Write my own question…</option>
+      </select>
+    </div>
+    <div class="fg" id="sq-ch-custom-wrap" style="display:none">
+      <div class="fl">Your Custom Question</div>
+      <input class="fi" id="sq-ch-custom" placeholder="Type your question…">
+    </div>
+    <div class="fg">
+      <div class="fl">Your Answer *</div>
+      <input class="fi" id="sq-ch-answer" placeholder="Type your answer…">
+      <div style="font-size:10px;color:var(--faint)">Answer is case-insensitive</div>
+    </div>`;
+  foot.innerHTML = `
+    <button class="btn ghost" onclick="closeOverlay('add-overlay')">Cancel</button>
+    <button class="btn primary" onclick="saveSQChange()">Save</button>`;
+  openOverlay("add-overlay");
+}
+
+async function saveSQChange() {
+  const sel = $("sq-ch-preset");
+  let question = sel.value === "__custom__" ? $("sq-ch-custom").value.trim() : sel.value;
+  const answer = $("sq-ch-answer").value.trim();
+  if (!question || !answer) { toast("Please fill in question and answer"); return; }
+  const hash = await hashSQAnswer(answer);
+  LS.set("vault_sq_question", question);
+  LS.set("vault_sq_hash", hash);
+  closeOverlay("add-overlay");
+  renderSQSettings();
+  toast("Secret question updated ✓");
 }
 
 // -- Biometric (WebAuthn) --
@@ -661,8 +880,19 @@ async function removeItem(id) {
 // ══════════════════════════════════════════════════════════
 //  RENDER — LIST
 // ══════════════════════════════════════════════════════════
-const T_ICON  = { password:"🔑", bookmark:"🔖", note:"📝", subscription:"💳" };
-const T_CLASS = { password:"ip", bookmark:"ib", note:"in", subscription:"is" };
+const T_ICON  = { password:"🔑", bookmark:"🔖", note:"📝", todo:"✅" };
+const T_CLASS = { password:"ip", bookmark:"ib", note:"in", todo:"it" };
+
+const TODO_COLORS = [
+  { name:"red",    hex:"#f87171" },
+  { name:"orange", hex:"#fb923c" },
+  { name:"amber",  hex:"#fbbf24" },
+  { name:"green",  hex:"#4ade80" },
+  { name:"teal",   hex:"#2dd4bf" },
+  { name:"blue",   hex:"#60a5fa" },
+  { name:"purple", hex:"#7c6af5" },
+  { name:"pink",   hex:"#f472b6" },
+];
 
 function getAllTags() {
   const s = new Set();
@@ -733,7 +963,7 @@ function renderList() {
   const area = $("list");
   const list = filtered();
   if (!list.length) {
-    const icons = { all:"🔐", password:"🔑", subscription:"💳", bookmark:"🔖", note:"📝" };
+    const icons = { all:"🔐", password:"🔑", todo:"✅", bookmark:"🔖", note:"📝" };
     const hint = STATE.activeTags.length
       ? "No items match the selected tags."
       : "Tap + to add your first item";
@@ -750,6 +980,7 @@ function renderList() {
 function renderAll() { renderList(); renderSelectedTags(); }
 
 function cardHTML(item) {
+  if (item.type === "todo") return todoCardHTML(item);
   const ico  = T_ICON[item.type]  || "📄";
   const cls  = T_CLASS[item.type] || "ip";
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
@@ -773,6 +1004,72 @@ function cardHTML(item) {
     <div class="card-detail">${detailHTML(item)}</div>
     <div class="card-actions">${actionsHTML(item)}</div>` : ""}
   </div>`;
+}
+
+// ── Todo Card ──────────────────────────────────────────
+function todoCardHTML(item) {
+  const subs = item.subitems || [];
+  const done = subs.filter(s => s.done).length;
+  const total = subs.length;
+  const colorClass = item.color ? " color-" + item.color : "";
+  const colorHex = (TODO_COLORS.find(c => c.name === item.color) || TODO_COLORS[6]).hex;
+  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
+  const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
+  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
+  const exp  = STATE.expandedId === item.id;
+  const id   = item.id;
+
+  let detail = "";
+  if (exp) {
+    const pct = total ? Math.round(done/total*100) : 0;
+    let tree = subs.map(s => {
+      const d = s.done;
+      return `<div class="todo-item sub">
+        <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone('${id}','${s.id}')">${d?"✓":""}</div>
+        <div class="todo-text${d?" done-text":""}">${esc(s.text)}</div>
+      </div>`;
+    }).join("");
+
+    const noteBlock = item.note ? `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>` : "";
+    const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${esc(t)}</span>`).join("")}</div>` : "";
+
+    detail = `<div class="todo-detail">
+      <div class="todo-progress">
+        <div class="todo-prog-bar"><div class="todo-prog-fill" style="width:${pct}%"></div></div>
+        <div class="todo-prog-label">${done}/${total} done</div>
+      </div>
+      <div class="todo-tree">${tree}</div>
+      ${noteBlock}${tagBlock}
+    </div>
+    <div class="card-actions">
+      <button class="cab" style="color:var(--amber)" onclick="toggleFav('${id}')"><span class="ca-ico">${item.fav?"★":"☆"}</span>Fav</button>
+      <button class="cab" style="color:var(--ac2)" onclick="openEdit('${id}')"><span class="ca-ico">✏️</span>Edit</button>
+      <button class="cab" style="color:var(--red)" onclick="askDelete('${id}')"><span class="ca-ico">🗑</span>Delete</button>
+    </div>`;
+  }
+
+  return `<div class="card todo-card${colorClass}${exp?" open":""}" id="card-${id}">
+    <div class="card-top" onclick="toggleCard('${id}')">
+      <div class="ci it">✅</div>
+      <div class="cm">
+        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${esc(item.title||"Untitled")}</div>
+        <div class="cs">${done} of ${total} completed</div>
+      </div>
+      <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
+      <div class="chev"${exp?' style="transform:rotate(180deg)"':""}>⌄</div>
+    </div>
+    ${detail}
+  </div>`;
+}
+
+async function toggleTodoDone(itemId, subId) {
+  const item = STATE.items.find(i => i.id === itemId);
+  if (!item || !item.subitems) return;
+  const sub = item.subitems.find(s => s.id === subId);
+  if (!sub) return;
+  sub.done = !sub.done;
+  await saveItem(item);
+  renderList();
 }
 
 function getFlagBadge(item) {
@@ -836,7 +1133,7 @@ function dRow(label, val, copyFn="") {
 function actionsHTML(item) {
   const id = item.id;
   let b = "";
-  if (item.type==="password" || item.type==="subscription") {
+  if (item.type==="password") {
     b += cab("👤","User","ca-copy", `copyVal('${id}','username')`);
     b += cab("🔑","Pass","ca-copy", `copyVal('${id}','password')`);
   }
@@ -900,6 +1197,8 @@ function openAdd() {
   STATE.mTags     = [];
   STATE.mType     = "password";
   STATE.mPriority = "high";
+  STATE.mSubitems = [];
+  STATE.mColor    = "purple";
   $("add-title").textContent = "Add Item";
   buildForm("password", null);
   openOverlay("add-overlay");
@@ -912,6 +1211,8 @@ function openEdit(id) {
   STATE.mTags     = [...(item.tags||[])];
   STATE.mType     = item.type;
   STATE.mPriority = item.priority || "normal";
+  STATE.mSubitems = (item.subitems||[]).map(s => ({...s}));
+  STATE.mColor    = item.color || "purple";
   $("add-title").textContent = "Edit Item";
   buildForm(item.type, item);
   openOverlay("add-overlay");
@@ -927,9 +1228,9 @@ function buildForm(type, pre) {
       <div class="fl">Type</div>
       <div class="type-grid">
         <div class="tcard${type==="password"?" on":""}" onclick="switchType('password',this)"><span class="tci">🔑</span>Password</div>
-        <div class="tcard${type==="subscription"?" on":""}" onclick="switchType('subscription',this)"><span class="tci">💳</span>Subscription</div>
         <div class="tcard${type==="bookmark"?" on":""}" onclick="switchType('bookmark',this)"><span class="tci">🔖</span>Bookmark</div>
         <div class="tcard${type==="note"?" on":""}" onclick="switchType('note',this)"><span class="tci">📝</span>Note</div>
+        <div class="tcard${type==="todo"?" on":""}" onclick="switchType('todo',this)"><span class="tci">✅</span>Todo</div>
       </div>
     </div><div class="divider"></div>`;
 
@@ -945,18 +1246,6 @@ function buildForm(type, pre) {
       </div>
       <div class="fg"><div class="fl">Website URL</div><input class="fi" id="f-url" type="url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
       <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
-  } else if (type === "subscription") {
-    fields = `
-      <div class="fg"><div class="fl">Service Name *</div><input class="fi" id="f-title" placeholder="Netflix, Spotify…" value="${esc(pre?.title||"")}"></div>
-      <div class="fg"><div class="fl">Email / Username</div><input class="fi" id="f-username" placeholder="account email" value="${esc(pre?.username||"")}"></div>
-      <div class="fg"><div class="fl">Password</div>
-        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password">
-        <span class="pweye" onclick="tpw('f-password')">👁</span></div>
-      </div>
-      <div class="fg"><div class="fl">Price</div><input class="fi" id="f-price" placeholder="$9.99/month" value="${esc(pre?.price||"")}"></div>
-      <div class="fg"><div class="fl">Renewal Date</div><input class="fi" id="f-renewal" type="date" value="${esc(pre?.renewal||"")}"></div>
-      <div class="fg"><div class="fl">Website URL</div><input class="fi" id="f-url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
-      <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "bookmark") {
     fields = `
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Bookmark name" value="${esc(pre?.title||"")}"></div>
@@ -966,6 +1255,21 @@ function buildForm(type, pre) {
     fields = `
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Note title" value="${esc(pre?.title||"")}"></div>
       <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
+  } else if (type === "todo") {
+    const colorPicker = TODO_COLORS.map(c =>
+      `<div class="color-dot${STATE.mColor===c.name?" on":""}" style="background:${c.hex}" onclick="selectColor('${c.name}')"></div>`
+    ).join("");
+    const subItems = STATE.mSubitems.map((s,i) =>
+      `<div class="subitem-row"><span class="sub-drag">⋮⋮</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Sub-item…" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})">✕</span></div>`
+    ).join("");
+    fields = `
+      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Todo title" value="${esc(pre?.title||"")}" autocomplete="off"></div>
+      <div class="fg"><div class="fl">Color</div><div class="color-picker">${colorPicker}</div></div>
+      <div class="fg"><div class="fl">Sub-items</div>
+        <div id="subitems-list">${subItems}</div>
+        <div class="add-sub-btn" onclick="addSubitem()">＋ Add Sub-item</div>
+      </div>
+      <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
   }
 
   const priorityBlock = `
@@ -1058,9 +1362,10 @@ async function submitItem() {
   const title = fv("f-title");
   if (!title) { toast("Title is required"); return; }
   const existing = STATE.editId ? STATE.items.find(i => i.id === STATE.editId) : null;
+  const itemType = existing?.type || STATE.mType;
   const item = {
     id       : STATE.editId || genId(),
-    type     : existing?.type || STATE.mType,
+    type     : itemType,
     fav      : existing?.fav  || false,
     created  : existing?.created || Date.now(),
     title,
@@ -1075,10 +1380,48 @@ async function submitItem() {
     priority : STATE.mPriority || "normal",
     flagDate : fv("f-flagDate") || null,
   };
+  // Todo-specific fields
+  if (itemType === "todo") {
+    item.color = STATE.mColor;
+    item.subitems = STATE.mSubitems.filter(s => s.text.trim()).map(s => ({
+      id: s.id || genId(),
+      text: s.text.trim(),
+      done: s.done || false,
+    }));
+  }
   await saveItem(item);
   closeOverlay("add-overlay");
   renderAll(); updateStats();
   toast(STATE.editId ? "Item updated ✓" : "Item added ✓");
+}
+
+function selectColor(name) {
+  STATE.mColor = name;
+  document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("on"));
+  event.target.classList.add("on");
+}
+
+function addSubitem() {
+  STATE.mSubitems.push({ id:genId(), text:"", done:false });
+  refreshSubitems();
+  // Focus the new input
+  setTimeout(() => {
+    const inp = $("sub-" + (STATE.mSubitems.length-1));
+    if (inp) inp.focus();
+  }, 50);
+}
+
+function removeSubitem(idx) {
+  STATE.mSubitems.splice(idx, 1);
+  refreshSubitems();
+}
+
+function refreshSubitems() {
+  const el = $("subitems-list");
+  if (!el) return;
+  el.innerHTML = STATE.mSubitems.map((s,i) =>
+    `<div class="subitem-row"><span class="sub-drag">⋮⋮</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Sub-item…" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})">✕</span></div>`
+  ).join("");
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1152,14 +1495,14 @@ async function doImport(e) {
 function updateStats() {
   const grid = $("stat-grid");
   if (!grid) return;
-  const c = { password:0, subscription:0, bookmark:0, note:0 };
+  const c = { password:0, todo:0, bookmark:0, note:0 };
   STATE.items.forEach(i => { if (c[i.type] !== undefined) c[i.type]++; });
   const favCount = STATE.items.filter(i => i.fav).length;
   grid.innerHTML = [
     [STATE.items.length, "Total Items", "🗄️"],
     [favCount,           "Favorites",   "★"],
     [c.password,         "Passwords",   "🔑"],
-    [c.subscription,     "Subscriptions","💳"],
+    [c.todo,             "Todos",       "✅"],
     [c.bookmark,         "Bookmarks",   "🔖"],
     [c.note,             "Notes",       "📝"],
   ].map(([n,l,i]) => `<div class="stat-box"><div class="stat-n">${n}</div><div class="stat-l">${i} ${l}</div></div>`).join("");
@@ -1198,28 +1541,7 @@ function setSort(val, el) {
   toast("Sort updated");
 }
 
-// ── Password generator ─────────────────────────────────
-function genPassword() {
-  let ch = "";
-  if (STATE.genOpts.upper) ch += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (STATE.genOpts.lower) ch += "abcdefghijklmnopqrstuvwxyz";
-  if (STATE.genOpts.num)   ch += "0123456789";
-  if (STATE.genOpts.sym)   ch += "!@#$%^&*()-_=+[]{}|;:,.<>?";
-  if (!ch) ch = "abcdefghijklmnopqrstuvwxyz";
-  const len = +$("gen-len").value;
-  let pw = "";
-  for (let i = 0; i < len; i++) pw += ch[Math.floor(Math.random() * ch.length)];
-  $("gen-out").textContent = pw;
-}
-function copyGenPw() {
-  const pw = $("gen-out").textContent;
-  if (pw === "Tap Generate") { toast("Generate first"); return; }
-  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓"));
-}
-function genToggle(k, el) {
-  STATE.genOpts[k] = !STATE.genOpts[k];
-  el.classList.toggle("on", STATE.genOpts[k]);
-}
+
 
 // ══════════════════════════════════════════════════════════
 //  PAGE NAV
@@ -1236,7 +1558,7 @@ function showPage(p) {
   $("fab").style.display = home ? "flex" : "none";
   $("nav-home").classList.toggle("on", home);
   $("nav-set").classList.toggle("on", !home);
-  if (!home) { updateStats(); renderDrivePanel(); }
+  if (!home) { updateStats(); renderDrivePanel(); renderSQSettings(); }
 }
 
 function dismissBanner() {

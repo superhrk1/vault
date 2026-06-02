@@ -1240,9 +1240,23 @@ function buildForm(type, pre) {
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Gmail, Netflix…" value="${esc(pre?.title||"")}" autocomplete="off"></div>
       <div class="fg"><div class="fl">Username / Email</div><input class="fi" id="f-username" placeholder="user@example.com" value="${esc(pre?.username||"")}" autocomplete="off"></div>
       <div class="fg"><div class="fl">Password</div>
-        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password">
+        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password" oninput="updateStrBar(this.value)">
         <span class="pweye" onclick="tpw('f-password')">👁</span></div>
         <div class="str-bar"><div class="str-fill" id="str-fill"></div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          <span class="gen-pill on" id="gp-upper" onclick="toggleGenPill(this,'upper')">A–Z</span>
+          <span class="gen-pill on" id="gp-lower" onclick="toggleGenPill(this,'lower')">a–z</span>
+          <span class="gen-pill on" id="gp-num" onclick="toggleGenPill(this,'num')">0–9</span>
+          <span class="gen-pill on" id="gp-sym" onclick="toggleGenPill(this,'sym')">!@#</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-size:11px;color:var(--muted);white-space:nowrap">Length: <b id="gen-len-val">20</b></span>
+          <input type="range" min="8" max="64" value="20" id="gen-len" oninput="$('gen-len-val').textContent=this.value" style="flex:1;accent-color:var(--ac)">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="btn primary" style="padding:8px 14px;font-size:12px;flex:1" onclick="genInlinePw()">🎲 Generate</button>
+          <button type="button" class="btn ghost" style="padding:8px 14px;font-size:12px;flex:0 0 auto" onclick="copyInlinePw()">📋 Copy</button>
+        </div>
       </div>
       <div class="fg"><div class="fl">Website URL</div><input class="fi" id="f-url" type="url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
       <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
@@ -1338,6 +1352,40 @@ function updateStrength() {
   const colors = ["","#f87171","#fbbf24","#fbbf24","#4ade80","#4ade80"];
   const fill   = $("str-fill");
   if (fill) { fill.style.width = (s * 20) + "%"; fill.style.background = colors[s]||""; }
+}
+
+function updateStrBar(v) { updateStrength(); }
+
+const _genOpts = { upper:true, lower:true, num:true, sym:true };
+
+function toggleGenPill(el, key) {
+  _genOpts[key] = !_genOpts[key];
+  el.classList.toggle("on", _genOpts[key]);
+}
+
+function genInlinePw() {
+  let chars = "";
+  if (_genOpts.upper) chars += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if (_genOpts.lower) chars += "abcdefghijklmnopqrstuvwxyz";
+  if (_genOpts.num)   chars += "0123456789";
+  if (_genOpts.sym)   chars += "!@#$%^&*()-_=+[]{}|;:,.<>?";
+  if (!chars) chars = "abcdefghijklmnopqrstuvwxyz";
+  const len = +($("gen-len")?.value || 20);
+  let pw = "";
+  for (let i = 0; i < len; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  const el = $("f-password");
+  if (el) {
+    el.value = pw;
+    el.type = "text";
+    updateStrength();
+  }
+  toast("Password generated ✓");
+}
+
+function copyInlinePw() {
+  const pw = $("f-password")?.value || "";
+  if (!pw) { toast("No password to copy"); return; }
+  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓"));
 }
 
 function addTag() {

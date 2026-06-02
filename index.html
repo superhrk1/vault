@@ -1433,6 +1433,16 @@
       background: var(--rbg);
       border-color: rgba(248, 113, 113, .2);
     }
+    /* ── INLINE GENERATOR PILLS ────────────────── */
+    .gen-pill {
+      padding:5px 12px; background:var(--s3); border:1px solid var(--b1);
+      border-radius:99px; font-size:11px; font-weight:700; color:var(--muted);
+      cursor:pointer; font-family:var(--sans); transition:all .15s;
+      user-select:none;
+    }
+    .gen-pill.on {
+      background:var(--acbg); border-color:var(--ac); color:var(--ac2);
+    }
 
     /* ── TODO CARD ──────────────────────────────── */
     .todo-card { border-left: 3px solid var(--ac); }

@@ -1,4 +1,4 @@
-const CACHE = "vault-pwa-v7";
+const CACHE = "vault-pwa-v9";
 const SHELL = ["./", "./index.html", "./config.js", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", e => {

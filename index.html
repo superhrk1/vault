@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport"
     content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#0c0d12">
+  <meta name="theme-color" content="#0a0b10">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,14 +22,14 @@
    VAULT — styles
    ═══════════════════════════════════════════════ */
     :root {
-      --bg: #0c0d12;
-      --s1: #13141b;
-      --s2: #1a1c25;
+      --bg: #0a0b10;
+      --s1: #111219;
+      --s2: #181a24;
       --s3: #22242f;
       --s4: #2b2e3d;
-      --b1: rgba(255, 255, 255, .055);
-      --b2: rgba(255, 255, 255, .10);
-      --b3: rgba(255, 255, 255, .17);
+      --b1: rgba(255, 255, 255, .05);
+      --b2: rgba(255, 255, 255, .09);
+      --b3: rgba(255, 255, 255, .15);
       --tx: #e8ecf5;
       --muted: #737891;
       --faint: #464b62;
@@ -99,12 +99,13 @@
       position: fixed;
       inset: 0;
       background: var(--bg);
+      background-image: radial-gradient(ellipse at 50% 30%, rgba(124,106,245,.06) 0%, transparent 60%);
       z-index: 900;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 20px;
+      gap: 18px;
       padding: 36px 24px;
       transition: opacity .35s, transform .35s;
     }
@@ -116,15 +117,15 @@
     }
 
     .lock-glyph {
-      width: 80px;
-      height: 80px;
-      background: var(--acbg);
-      border-radius: 22px;
+      width: 72px;
+      height: 72px;
+      background: rgba(124, 106, 245, .08);
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 38px;
-      border: 1px solid rgba(124, 106, 245, .28);
+      font-size: 34px;
+      border: 1.5px solid rgba(124, 106, 245, .22);
       animation: pulse 3s ease-in-out infinite;
     }
 
@@ -141,9 +142,10 @@
     }
 
     .lock-wm {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
-      letter-spacing: -1px;
+      letter-spacing: 5px;
+      text-transform: uppercase;
       text-align: center;
     }
 
@@ -237,18 +239,19 @@
     /* ── NUMPAD ─────────────────────────────── */
     .numpad {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 11px;
+      grid-template-columns: repeat(3, 60px);
+      gap: 14px;
+      justify-content: center;
       width: 100%;
-      max-width: 300px;
+      max-width: 260px;
     }
 
     .nk {
-      height: 68px;
-      border-radius: 18px;
+      height: 60px;
+      border-radius: 50%;
       background: var(--s2);
       border: 1px solid var(--b2);
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 500;
       color: var(--tx);
       cursor: pointer;
@@ -259,13 +262,13 @@
       user-select: none;
       -webkit-tap-highlight-color: transparent;
       font-family: var(--mono);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+      box-shadow: none;
+      aspect-ratio: 1;
     }
 
     .nk:active {
       background: var(--s3);
-      transform: scale(.91);
-      box-shadow: none;
+      transform: scale(.90);
     }
 
     .nk.nk-back {
@@ -634,7 +637,7 @@
       color: var(--muted);
       cursor: pointer;
       border-bottom: 2px solid transparent;
-      transition: color .15s, border-color .15s;
+      transition: all .2s;
       letter-spacing: .3px;
       text-transform: uppercase;
     }
@@ -642,6 +645,7 @@
     .tab.on {
       color: var(--ac2);
       border-bottom-color: var(--ac);
+      background: rgba(124,106,245,.05);
     }
 
     /* ── SEARCH ─────────────────────────────────── */
@@ -942,7 +946,7 @@
       padding: 10px 14px 100px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
 
     .empty {
@@ -972,18 +976,30 @@
       max-width: 220px;
     }
 
-    /* ── CARD ───────────────────────────────────── */
+    /* ── CARD ─────────────────────────────── */
     .card {
       background: var(--s1);
       border: 1px solid var(--b1);
       border-radius: var(--r2);
       overflow: hidden;
-      transition: border-color .15s;
+      transition: border-color .2s, box-shadow .25s;
+      border-left: 3px solid var(--b2);
+    }
+
+    .card:hover {
+      border-color: var(--b2);
     }
 
     .card.open {
       border-color: var(--b2);
+      box-shadow: 0 4px 24px rgba(0,0,0,.3);
     }
+
+    /* Per-type card accent borders */
+    .card:has(.ip) { border-left-color: var(--ac); }
+    .card:has(.ib) { border-left-color: var(--blue); }
+    .card:has(.in) { border-left-color: var(--amber); }
+    .card:has(.it) { border-left-color: var(--green); }
 
     .card-top {
       display: flex;
@@ -998,7 +1014,7 @@
     .ci {
       width: 40px;
       height: 40px;
-      border-radius: 10px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1271,7 +1287,7 @@
     }
 
     .set-sec {
-      padding: 18px 18px;
+      padding: 20px 18px;
       border-bottom: 1px solid var(--b1);
     }
 
@@ -1333,14 +1349,14 @@
     }
 
     .stat-box {
-      background: var(--s2);
+      background: var(--s1);
       border: 1px solid var(--b1);
-      border-radius: var(--r);
-      padding: 12px 14px;
+      border-radius: var(--r2);
+      padding: 14px 16px;
     }
 
     .stat-n {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
       letter-spacing: -1px;
     }
@@ -1632,7 +1648,9 @@
     /* ── BOTTOM NAV ─────────────────────────────── */
     #nav {
       flex-shrink: 0;
-      background: var(--s1);
+      background: rgba(17, 18, 25, .85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-top: 1px solid var(--b1);
       display: flex;
       padding-bottom: max(10px, var(--sbt));
@@ -1651,7 +1669,7 @@
       font-weight: 700;
       letter-spacing: .4px;
       text-transform: uppercase;
-      transition: color .15s;
+      transition: color .2s;
     }
 
     .nav-item.on {
@@ -1667,10 +1685,10 @@
       position: fixed;
       right: 18px;
       bottom: calc(66px + max(10px, var(--sbt)));
-      width: 54px;
-      height: 54px;
-      background: var(--ac);
-      border-radius: 15px;
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #7c6af5, #9b8afb);
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1678,7 +1696,7 @@
       font-weight: 300;
       color: #fff;
       cursor: pointer;
-      box-shadow: 0 6px 28px rgba(124, 106, 245, .45);
+      box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 0 rgba(124,106,245,.2);
       z-index: 50;
       transition: transform .15s, box-shadow .15s;
     }
@@ -2017,7 +2035,8 @@
     <div class="lock-glyph">🔐</div>
     <div style="text-align:center">
       <div class="lock-wm">Vault</div>
-      <div class="lock-sub" style="margin-top:4px">AES-256 encrypted</div>
+      <div style="width:40px;height:2px;background:linear-gradient(90deg,transparent,var(--ac),transparent);margin:10px auto 8px;border-radius:2px"></div>
+      <div class="lock-sub" style="margin-top:0">AES-256 · End-to-End Encrypted</div>
     </div>
 
     <!-- Lockout countdown -->

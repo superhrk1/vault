@@ -15,6 +15,7 @@ const b64e = u => btoa(String.fromCharCode(...u));
 const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const vibrate = ms => { try { navigator?.vibrate?.(ms); } catch {} };
 
 // ── LS wrapper ────────────────────────────────────────────
 const LS = {
@@ -77,6 +78,7 @@ let STATE = {
   mPriority        : "high",
   mSubitems        : [],
   mColor           : "purple",
+  autoLockMin      : 5,
   drive: {
     token     : null,
     fileId    : null,
@@ -98,8 +100,27 @@ async function persistItems() {
 async function loadItems() {
   const blob = LS.get("vault_data");
   if (!blob) { STATE.items = []; return; }
-  try { STATE.items = await Crypto.decrypt(blob, STATE.masterKey); }
-  catch { STATE.items = []; }
+  try {
+    STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
+    validateItems();
+  } catch {
+    STATE.items = [];
+  }
+}
+
+// ── Data integrity validation ──────────────────────────
+function validateItems() {
+  STATE.items = STATE.items.filter(item => {
+    if (!item || typeof item !== 'object') return false;
+    if (!item.id) item.id = genId();
+    if (!item.type) item.type = 'note';
+    if (!item.title) item.title = 'Untitled';
+    if (!item.created) item.created = Date.now();
+    if (!Array.isArray(item.tags)) item.tags = [];
+    if (typeof item.fav !== 'boolean') item.fav = false;
+    if (item.type === 'todo' && !Array.isArray(item.subitems)) item.subitems = [];
+    return true;
+  });
 }
 
 // ══════════════════════════════════════════════════════════
@@ -113,6 +134,7 @@ async function boot() {
   STATE.drive.token    = LS.get("drive_token");
   STATE.drive.fileId   = LS.get("drive_file_id");
   STATE.drive.lastSync = LS.get("drive_last_sync");
+  STATE.autoLockMin    = LS.get("vault_autolock") ?? 5;
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   STATE.drive.status = configured ? (STATE.drive.token ? "synced" : "offline") : "noconfig";
@@ -133,6 +155,8 @@ async function boot() {
   renderPinDots();
   renderSyncBadge();
   checkLockout();
+  // Restore auto-lock setting UI
+  initAutoLockUI();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -144,6 +168,7 @@ let _lockoutTimer = null;
 
 function numpadPress(digit) {
   if (_pin.length >= 12) return;
+  vibrate(25);
   _pin += digit;
   renderPinDots();
   const btn = $("nk-submit");
@@ -152,6 +177,7 @@ function numpadPress(digit) {
 
 function numpadBack() {
   if (!_pin.length) return;
+  vibrate(15);
   _pin = _pin.slice(0, -1);
   renderPinDots();
   const btn = $("nk-submit");
@@ -231,11 +257,16 @@ function openApp() {
   }
   // Offer biometric registration if not already set up
   offerBioRegistration();
+  // Start auto-lock timer
+  startAutoLock();
+  // FAB pulse hint if empty
+  updateFabPulse();
 }
 
 function lockVault() {
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
+  stopAutoLock();
   $("lock").classList.remove("gone"); setLockErr(""); renderPinDots();
   const btn = $("nk-submit"); if (btn) btn.classList.add("dim");
   const hasVault = !!LS.get("vault_hash");
@@ -330,7 +361,7 @@ async function saveSQFromSetup() {
   LS.set("vault_sq_hash", hash);
   $("sq-setup").style.display = "none";
   openApp();
-  toast("Recovery question saved ✓");
+  toast("Recovery question saved ✓", "success");
 }
 
 function skipSQSetup() {
@@ -429,7 +460,7 @@ async function handlePinReset() {
   // Clear biometric since PIN changed
   LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
   openApp();
-  toast("PIN reset ✓ — Vault data was cleared for security");
+  toast("PIN reset ✓ — Vault data was cleared for security", "warn");
 }
 
 async function sqLockoutUnlock() {
@@ -447,7 +478,7 @@ async function sqLockoutUnlock() {
   clearFailCount();
   endLockout();
   startPinReset();
-  toast("Verified ✓ — Create a new PIN");
+  toast("Verified ✓ — Create a new PIN", "success");
 }
 
 function renderSQSettings() {
@@ -512,7 +543,7 @@ async function saveSQChange() {
   LS.set("vault_sq_hash", hash);
   closeOverlay("add-overlay");
   renderSQSettings();
-  toast("Secret question updated ✓");
+  toast("Secret question updated ✓", "success");
 }
 
 // -- Biometric (WebAuthn) --
@@ -566,10 +597,10 @@ async function registerBiometric(pin) {
     LS.set("vault_bio_nonce", btoa(String.fromCharCode(...nonce)));
     LS.set("vault_bio_enc", btoa(String.fromCharCode(...encrypted)));
 
-    toast("Fingerprint unlock enabled ✓");
+    toast("Fingerprint unlock enabled ✓", "success");
   } catch (e) {
     console.warn("Bio registration failed:", e);
-    toast("Fingerprint setup failed");
+    toast("Fingerprint setup failed", "error");
   }
 }
 
@@ -605,7 +636,7 @@ async function biometricUnlock() {
       STATE.masterKey = pin;
       await loadItems();
       openApp();
-      toast("Unlocked with fingerprint ✓");
+      toast("Unlocked with fingerprint ✓", "success");
     } else {
       // PIN changed since bio was registered
       setLockErr("Fingerprint data outdated — use PIN");
@@ -669,7 +700,7 @@ function connectDrive() {
         STATE.drive.token  = p.get("access_token");
         LS.set("drive_token", STATE.drive.token);
         popup.close();
-        toast("Google Drive connected ✓");
+        toast("Google Drive connected ✓", "success");
         renderDrivePanel();
         renderSyncBadge();
         triggerSync();
@@ -687,7 +718,7 @@ function disconnectDrive() {
   LS.del("drive_last_sync");
   renderDrivePanel();
   renderSyncBadge();
-  toast("Drive disconnected");
+  toast("Drive disconnected", "info");
 }
 
 async function driveReq(url, opts = {}) {
@@ -720,12 +751,12 @@ async function triggerSync() {
     STATE.drive.lastSync = now;
     LS.set("drive_last_sync", now);
     setSyncStatus("synced");
-    toast("Synced to Drive ✓");
+    toast("Synced to Drive ✓", "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
-    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect");
-    else toast("Sync failed: " + e.message);
+    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
+    else toast("Sync failed: " + e.message, "error");
   }
 }
 
@@ -798,12 +829,12 @@ async function pullFromDrive() {
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
-    toast(`Pulled ${added} new items from Drive ✓`);
+    toast(`Pulled ${added} new items from Drive ✓`, "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
-    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect");
-    else toast("Pull failed: " + e.message);
+    if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
+    else toast("Pull failed: " + e.message, "error");
   }
 }
 
@@ -915,7 +946,14 @@ function switchTab(el, t) {
 
 function onSearch(inp) {
   $("q-clear").style.display = inp.value ? "block" : "none";
-  renderList();
+  debouncedRenderList();
+}
+
+// Debounced search for performance
+let _searchTimer = null;
+function debouncedRenderList() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => renderList(), 150);
 }
 function clearSearch() {
   $("q").value = "";
@@ -962,15 +1000,20 @@ function filtered() {
 function renderList() {
   const area = $("list");
   const list = filtered();
+  // Update FAB pulse based on items
+  updateFabPulse();
   if (!list.length) {
     const icons = { all:"🔐", password:"🔑", todo:"✅", bookmark:"🔖", note:"📝" };
+    const labels = { all:"item", password:"password", todo:"todo", bookmark:"bookmark", note:"note" };
     const hint = STATE.activeTags.length
       ? "No items match the selected tags."
-      : "Tap + to add your first item";
+      : "Your vault is empty — let's add something!";
+    const actionLabel = STATE.tab === "all" ? "Add your first item" : `Add a ${labels[STATE.tab]||'item'}`;
     area.innerHTML = `<div class="empty">
       <div class="empty-ico">${icons[STATE.tab]||"🔐"}</div>
       <div class="empty-title">Nothing here yet</div>
       <div class="empty-sub">${hint}</div>
+      ${!STATE.activeTags.length ? `<div class="empty-action" onclick="openAdd()">＋ ${actionLabel}</div>` : ''}
     </div>`;
     return;
   }
@@ -1174,9 +1217,20 @@ async function copyVal(id, field) {
 }
 
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast("Copied ✓"); }
-  catch { toast("Copy not available"); }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied ✓", "success");
+    // Auto-clear clipboard after 30s for security
+    if (_clipboardClearTimer) clearTimeout(_clipboardClearTimer);
+    _clipboardClearTimer = setTimeout(async () => {
+      try {
+        await navigator.clipboard.writeText('');
+        toast("Clipboard cleared for security 🔒", "info");
+      } catch {}
+    }, 30000);
+  } catch { toast("Copy not available", "warn"); }
 }
+let _clipboardClearTimer = null;
 
 function openLink(id) {
   const item = STATE.items.find(i => i.id === id);
@@ -1189,7 +1243,16 @@ async function toggleFav(id) {
   item.fav = !item.fav;
   await saveItem(item);
   renderList();
-  toast(item.fav ? "Added to favorites ★" : "Removed from favorites");
+  // Star burst animation
+  if (item.fav) {
+    vibrate(30);
+    const card = $("card-" + id);
+    if (card) {
+      card.classList.add("star-burst");
+      setTimeout(() => card.classList.remove("star-burst"), 500);
+    }
+  }
+  toast(item.fav ? "Added to favorites ★" : "Removed from favorites", item.fav ? "success" : "info");
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1382,13 +1445,13 @@ function genInlinePw() {
     el.type = "text";
     updateStrength();
   }
-  toast("Password generated ✓");
+  toast("Password generated ✓", "success");
 }
 
 function copyInlinePw() {
   const pw = $("f-password")?.value || "";
-  if (!pw) { toast("No password to copy"); return; }
-  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓"));
+  if (!pw) { toast("No password to copy", "warn"); return; }
+  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓", "success"));
 }
 
 function addTag() {
@@ -1443,7 +1506,7 @@ async function submitItem() {
   await saveItem(item);
   closeOverlay("add-overlay");
   renderAll(); updateStats();
-  toast(STATE.editId ? "Item updated ✓" : "Item added ✓");
+  toast(STATE.editId ? "Item updated ✓" : "Item added ✓", "success");
 }
 
 function selectColor(name) {
@@ -1487,7 +1550,7 @@ function askDelete(id) {
   $("confirm-ok").onclick = async () => {
     STATE.expandedId = null;
     closeOverlay("confirm-overlay");
-    toast("Deleted");
+    toast("Deleted", "info");
     await removeItem(id);
   };
   openOverlay("confirm-overlay");
@@ -1499,8 +1562,9 @@ function askDelete(id) {
 async function exportJSON() {
   const encrypted = await Crypto.encrypt(STATE.items, STATE.masterKey);
   const payload   = JSON.stringify({ version:2, app:"vault-pwa", exported:new Date().toISOString(), vault:encrypted });
-  dl("vault-backup.enc.json", payload, "application/json");
-  toast("Vault exported ✓");
+  const dateStr   = new Date().toISOString().slice(0,10);
+  dl(`vault-backup-${dateStr}.enc.json`, payload, "application/json");
+  toast("Vault exported ✓", "success");
 }
 
 function exportCSV() {
@@ -1511,7 +1575,7 @@ function exportCSV() {
   ]));
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
   dl("vault-export.csv", csv, "text/csv");
-  toast("CSV exported (passwords excluded for safety)");
+  toast("CSV exported (passwords excluded for safety)", "success");
 }
 
 function dl(name, content, mime) {
@@ -1537,8 +1601,8 @@ async function doImport(e) {
     await persistItems();
     if (STATE.drive.token) triggerSync();
     renderAll(); updateStats();
-    toast(`Imported ${added} items ✓`);
-  } catch (err) { toast("Import failed: " + err.message); }
+    toast(`Imported ${added} items ✓`, "success");
+  } catch (err) { toast("Import failed: " + err.message, "error"); }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1550,14 +1614,23 @@ function updateStats() {
   const c = { password:0, todo:0, bookmark:0, note:0 };
   STATE.items.forEach(i => { if (c[i.type] !== undefined) c[i.type]++; });
   const favCount = STATE.items.filter(i => i.fav).length;
-  grid.innerHTML = [
+  const data = [
     [STATE.items.length, "Total Items", "🗄️"],
     [favCount,           "Favorites",   "★"],
     [c.password,         "Passwords",   "🔑"],
     [c.todo,             "Todos",       "✅"],
     [c.bookmark,         "Bookmarks",   "🔖"],
     [c.note,             "Notes",       "📝"],
-  ].map(([n,l,i]) => `<div class="stat-box"><div class="stat-n">${n}</div><div class="stat-l">${i} ${l}</div></div>`).join("");
+  ];
+  grid.innerHTML = data.map(([n,l,i]) =>
+    `<div class="stat-box"><div class="stat-n" data-target="${n}">0</div><div class="stat-l">${i} ${l}</div></div>`
+  ).join("");
+  // Animate counters
+  requestAnimationFrame(() => {
+    grid.querySelectorAll('.stat-n[data-target]').forEach(el => {
+      animateCounter(el, parseInt(el.dataset.target));
+    });
+  });
 }
 
 async function changeMasterPw() {
@@ -1568,7 +1641,7 @@ async function changeMasterPw() {
   LS.set("vault_hash", await Crypto.hashPassword(nw));
   $("new-pw").value = "";
   if (STATE.drive.token) triggerSync();
-  toast("Master password updated ✓");
+  toast("Master password updated ✓", "success");
 }
 
 function clearAll() {
@@ -1590,7 +1663,120 @@ function setSort(val, el) {
   document.querySelectorAll(".sort-chip").forEach(c => c.classList.remove("on"));
   el.classList.add("on");
   renderList();
-  toast("Sort updated");
+  toast("Sort updated", "info");
+}
+
+// ══════════════════════════════════════════════════════════
+//  AUTO-LOCK TIMER
+// ══════════════════════════════════════════════════════════
+let _autoLockTimer = null;
+let _autoLockStart = 0;
+let _autoLockDuration = 0;
+let _autoLockRAF = null;
+
+function startAutoLock() {
+  stopAutoLock();
+  const mins = STATE.autoLockMin;
+  if (!mins || mins <= 0) {
+    const bar = $("autolock-bar");
+    if (bar) bar.style.width = '0%';
+    return;
+  }
+  _autoLockDuration = mins * 60 * 1000;
+  _autoLockStart = Date.now();
+  // Listen for activity
+  ['click','keydown','touchstart','mousemove','scroll'].forEach(e =>
+    document.addEventListener(e, resetAutoLock, { passive: true })
+  );
+  updateAutoLockBar();
+}
+
+function stopAutoLock() {
+  if (_autoLockTimer) clearTimeout(_autoLockTimer);
+  if (_autoLockRAF) cancelAnimationFrame(_autoLockRAF);
+  _autoLockTimer = null;
+  _autoLockRAF = null;
+  ['click','keydown','touchstart','mousemove','scroll'].forEach(e =>
+    document.removeEventListener(e, resetAutoLock)
+  );
+  const bar = $("autolock-bar");
+  if (bar) { bar.style.width = '0%'; bar.classList.remove('urgent'); }
+}
+
+function resetAutoLock() {
+  if (!STATE.masterKey) return;
+  _autoLockStart = Date.now();
+  const bar = $("autolock-bar");
+  if (bar) bar.classList.remove('urgent');
+}
+
+function updateAutoLockBar() {
+  if (!STATE.masterKey || !_autoLockDuration) return;
+  const elapsed = Date.now() - _autoLockStart;
+  const remaining = _autoLockDuration - elapsed;
+  const pct = Math.max(0, (remaining / _autoLockDuration) * 100);
+  const bar = $("autolock-bar");
+  if (bar) {
+    bar.style.width = pct + '%';
+    // Urgent state when < 30 seconds left
+    if (remaining < 30000 && remaining > 0) {
+      bar.classList.add('urgent');
+    }
+  }
+  if (remaining <= 0) {
+    lockVault();
+    toast("Vault locked — inactivity timeout 🔒", "warn");
+    return;
+  }
+  _autoLockRAF = requestAnimationFrame(updateAutoLockBar);
+}
+
+function setAutoLock(mins, el) {
+  STATE.autoLockMin = mins;
+  LS.set("vault_autolock", mins);
+  document.querySelectorAll(".al-pill").forEach(c => c.classList.remove("on"));
+  if (el) el.classList.add("on");
+  // Restart timer with new duration
+  if (STATE.masterKey) startAutoLock();
+  toast(mins ? `Auto-lock: ${mins} min` : "Auto-lock disabled", "info");
+}
+
+function initAutoLockUI() {
+  const saved = LS.get("vault_autolock");
+  if (saved !== null && saved !== undefined) STATE.autoLockMin = saved;
+  const pills = document.querySelectorAll(".al-pill");
+  pills.forEach(p => {
+    p.classList.remove("on");
+    const val = parseInt(p.textContent);
+    if (isNaN(val) && STATE.autoLockMin === 0) p.classList.add("on");
+    else if (val === STATE.autoLockMin) p.classList.add("on");
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  FAB PULSE
+// ══════════════════════════════════════════════════════════
+function updateFabPulse() {
+  const fab = $("fab");
+  if (!fab) return;
+  fab.classList.toggle("pulse-hint", STATE.items.length === 0);
+}
+
+// ══════════════════════════════════════════════════════════
+//  ANIMATED STAT COUNTERS
+// ══════════════════════════════════════════════════════════
+function animateCounter(el, target) {
+  const duration = 600;
+  const start = performance.now();
+  const initial = 0;
+  const step = (now) => {
+    const progress = Math.min((now - start) / duration, 1);
+    // Ease out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(initial + (target - initial) * eased);
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 
@@ -1629,16 +1815,38 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+
 // ══════════════════════════════════════════════════════════
-//  TOAST
+//  TOAST — Premium with context icons & progress bar
 // ══════════════════════════════════════════════════════════
 let _tt;
-function toast(msg) {
+function toast(msg, type = "info") {
   const t = $("toast");
-  t.textContent = msg;
-  t.classList.add("show");
+  const textEl = $("toast-text");
+  const progressEl = $("toast-progress");
+  // Set context icon
+  const icons = { success: "✓", error: "✕", warn: "⚠", info: "ℹ" };
+  const ico = icons[type] || "";
+  if (textEl) textEl.textContent = ico ? `${ico} ${msg}` : msg;
+  else t.textContent = msg;
+  // Set context class
+  t.className = `show toast-${type}`;
+  // Animate progress bar
+  if (progressEl) {
+    progressEl.style.transition = 'none';
+    progressEl.style.width = '100%';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        progressEl.style.transition = 'width 2.6s linear';
+        progressEl.style.width = '0%';
+      });
+    });
+  }
   clearTimeout(_tt);
-  _tt = setTimeout(() => t.classList.remove("show"), 2600);
+  _tt = setTimeout(() => {
+    t.className = '';
+    if (progressEl) progressEl.style.width = '100%';
+  }, 2600);
 }
 
 // ══════════════════════════════════════════════════════════

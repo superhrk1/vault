@@ -19,7 +19,7 @@
     rel="stylesheet">
   <style>
     /* ═══════════════════════════════════════════════
-   VAULT — styles
+   VAULT — Premium Edition styles
    ═══════════════════════════════════════════════ */
     :root {
       --bg: #0a0b10;
@@ -52,6 +52,10 @@
       --sans: 'Syne', sans-serif;
       --sbt: env(safe-area-inset-bottom, 0px);
       --stt: env(safe-area-inset-top, 0px);
+      --glow-pw: rgba(124, 106, 245, .18);
+      --glow-bm: rgba(96, 165, 250, .18);
+      --glow-nt: rgba(251, 191, 36, .18);
+      --glow-td: rgba(74, 222, 128, .18);
     }
 
     *,
@@ -99,7 +103,6 @@
       position: fixed;
       inset: 0;
       background: var(--bg);
-      background-image: radial-gradient(ellipse at 50% 30%, rgba(124, 106, 245, .06) 0%, transparent 60%);
       z-index: 900;
       display: flex;
       flex-direction: column;
@@ -107,13 +110,82 @@
       justify-content: center;
       gap: 18px;
       padding: 36px 24px;
-      transition: opacity .35s, transform .35s;
+      transition: opacity .45s cubic-bezier(.22,.68,0,1), transform .45s cubic-bezier(.22,.68,0,1);
+      overflow: hidden;
+    }
+
+    /* Animated mesh gradient background */
+    #lock::before {
+      content: '';
+      position: absolute;
+      inset: -50%;
+      background:
+        radial-gradient(ellipse at 25% 20%, rgba(124, 106, 245, .12) 0%, transparent 50%),
+        radial-gradient(ellipse at 75% 60%, rgba(96, 165, 250, .08) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(168, 85, 247, .06) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 70%, rgba(74, 222, 128, .04) 0%, transparent 40%);
+      animation: meshDrift 12s ease-in-out infinite;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    @keyframes meshDrift {
+      0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+      25% { transform: translate(3%, -4%) rotate(1deg) scale(1.03); }
+      50% { transform: translate(-2%, 3%) rotate(-0.5deg) scale(1.01); }
+      75% { transform: translate(4%, 2%) rotate(0.8deg) scale(1.04); }
+    }
+
+    /* Floating particle accents */
+    #lock::after {
+      content: '';
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124, 106, 245, .06) 0%, transparent 70%);
+      top: 15%;
+      right: -40px;
+      animation: floatOrb 8s ease-in-out infinite;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translateY(0) scale(1); opacity: .6; }
+      50% { transform: translateY(-30px) scale(1.15); opacity: 1; }
     }
 
     #lock.gone {
       opacity: 0;
-      transform: scale(1.04);
+      transform: scale(1.06);
       pointer-events: none;
+    }
+
+    /* Glassmorphism PIN card */
+    .lock-card {
+      background: rgba(17, 18, 25, .55);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(124, 106, 245, .12);
+      border-radius: 24px;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      max-width: 340px;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, .4),
+        0 0 0 1px rgba(255, 255, 255, .03),
+        inset 0 1px 0 rgba(255, 255, 255, .04);
+      animation: cardAppear .6s cubic-bezier(.22,.68,0,1);
+    }
+
+    @keyframes cardAppear {
+      from { opacity: 0; transform: translateY(20px) scale(.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .lock-glyph {
@@ -127,18 +199,26 @@
       font-size: 34px;
       border: 1.5px solid rgba(124, 106, 245, .22);
       animation: pulse 3s ease-in-out infinite;
+      position: relative;
+    }
+
+    .lock-glyph::after {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      border: 1px solid rgba(124, 106, 245, .08);
+      animation: ringPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes ringPulse {
+      0%, 100% { transform: scale(1); opacity: .5; }
+      50% { transform: scale(1.12); opacity: 0; }
     }
 
     @keyframes pulse {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 0 rgba(124, 106, 245, .25);
-      }
-
-      50% {
-        box-shadow: 0 0 0 14px rgba(124, 106, 245, 0);
-      }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(124, 106, 245, .25); }
+      50% { box-shadow: 0 0 0 14px rgba(124, 106, 245, 0); }
     }
 
     .lock-wm {
@@ -188,13 +268,21 @@
       border-radius: 50%;
       border: 2px solid var(--b3);
       background: transparent;
-      transition: background .12s, border-color .12s, transform .12s;
+      transition: background .15s cubic-bezier(.34,1.56,.64,1), border-color .15s, transform .25s cubic-bezier(.34,1.56,.64,1), box-shadow .25s;
     }
 
     .pin-dot.filled {
       background: var(--ac);
       border-color: var(--ac);
-      transform: scale(1.15);
+      transform: scale(1.2);
+      box-shadow: 0 0 12px rgba(124, 106, 245, .4);
+      animation: dotPop .3s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    @keyframes dotPop {
+      0% { transform: scale(.5); opacity: .5; }
+      60% { transform: scale(1.35); }
+      100% { transform: scale(1.2); opacity: 1; }
     }
 
     .pin-dot.cursor {
@@ -203,37 +291,24 @@
     }
 
     @keyframes dotblink {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: .3
-      }
+      0%, 100% { opacity: 1 }
+      50% { opacity: .3 }
     }
 
     @keyframes dotshake {
-
-      0%,
-      100% {
-        transform: translateX(0)
-      }
-
-      15%,
-      55% {
-        transform: translateX(-5px)
-      }
-
-      35%,
-      75% {
-        transform: translateX(5px)
-      }
+      0%, 100% { transform: translateX(0) }
+      15%, 55% { transform: translateX(-5px) }
+      35%, 75% { transform: translateX(5px) }
     }
 
     .pin-dots.shake .pin-dot {
       animation: dotshake .4s ease;
+    }
+
+    .pin-dots.shake .pin-dot.filled {
+      background: var(--red);
+      border-color: var(--red);
+      box-shadow: 0 0 12px rgba(248, 113, 113, .4);
     }
 
     /* ── NUMPAD ─────────────────────────────── */
@@ -248,8 +323,10 @@
     .nk {
       height: 60px;
       border-radius: 50%;
-      background: var(--s2);
-      border: 1px solid var(--b2);
+      background: rgba(24, 26, 36, .7);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, .07);
       font-size: 24px;
       font-weight: 500;
       color: var(--tx);
@@ -257,17 +334,43 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background .09s, transform .08s, box-shadow .09s;
+      transition: background .12s, transform .15s cubic-bezier(.34,1.56,.64,1), box-shadow .15s, border-color .15s;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
       font-family: var(--mono);
-      box-shadow: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
       aspect-ratio: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Ripple effect */
+    .nk::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124, 106, 245, .3) 0%, transparent 70%);
+      opacity: 0;
+      transform: scale(0);
+      transition: opacity .4s, transform .4s;
+    }
+
+    .nk:active::after {
+      opacity: 1;
+      transform: scale(2.5);
+      transition: opacity 0s, transform 0s;
     }
 
     .nk:active {
       background: var(--s3);
-      transform: scale(.90);
+      transform: scale(.88);
+      border-color: rgba(124, 106, 245, .2);
+    }
+
+    .nk:hover {
+      background: rgba(34, 36, 47, .8);
+      border-color: rgba(255, 255, 255, .1);
     }
 
     .nk.nk-back {
@@ -276,20 +379,22 @@
     }
 
     .nk.nk-submit {
-      background: var(--ac);
-      border-color: var(--ac);
+      background: linear-gradient(135deg, var(--ac), #9b8afb);
+      border-color: rgba(124, 106, 245, .4);
       color: #fff;
       font-size: 22px;
-      box-shadow: 0 2px 10px rgba(124, 106, 245, .35);
+      box-shadow: 0 4px 16px rgba(124, 106, 245, .4), 0 0 0 0 rgba(124, 106, 245, .15);
     }
 
     .nk.nk-submit:active {
-      background: var(--ac2);
+      background: linear-gradient(135deg, var(--ac2), var(--ac));
+      transform: scale(.88);
     }
 
     .nk.nk-submit.dim {
-      opacity: .35;
+      opacity: .3;
       pointer-events: none;
+      box-shadow: none;
     }
 
     .nk.nk-empty {
@@ -297,6 +402,10 @@
       border: none;
       box-shadow: none;
       pointer-events: none;
+    }
+
+    .nk.nk-empty::after {
+      display: none;
     }
 
     /* ── LOCKOUT BLOCK ────────────────────────── */
@@ -476,6 +585,26 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      position: relative;
+    }
+
+    /* Auto-lock progress bar */
+    #autolock-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--ac), var(--ac2));
+      border-radius: 0 99px 99px 0;
+      transition: width .5s linear;
+      z-index: 2;
+      opacity: .6;
+    }
+
+    #autolock-bar.urgent {
+      background: linear-gradient(90deg, var(--red), var(--amber));
+      opacity: 1;
+      height: 2px;
     }
 
     .sb-l {
@@ -513,10 +642,26 @@
       border: 1px solid rgba(251, 191, 36, .2);
     }
 
+    .syncing .sdot {
+      animation: syncSpin .8s linear infinite;
+    }
+
+    @keyframes syncSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     .sync-badge.synced {
       background: var(--gbg);
       color: var(--green);
       border: 1px solid rgba(74, 222, 128, .2);
+      animation: syncPulse .5s ease;
+    }
+
+    @keyframes syncPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+      100% { transform: scale(1); }
     }
 
     .sync-badge.error {
@@ -539,20 +684,9 @@
       flex-shrink: 0;
     }
 
-    .syncing .sdot {
-      animation: blink .8s ease-in-out infinite;
-    }
-
     @keyframes blink {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: .15
-      }
+      0%, 100% { opacity: 1 }
+      50% { opacity: .15 }
     }
 
     .sb-r {
@@ -571,11 +705,16 @@
       justify-content: center;
       cursor: pointer;
       font-size: 15px;
-      transition: background .15s;
+      transition: background .15s, transform .15s, border-color .15s;
     }
 
     .hbtn:active {
       background: var(--s2);
+      transform: scale(.9);
+    }
+
+    .hbtn:hover {
+      border-color: var(--b2);
     }
 
     /* ── DRIVE BANNER ───────────────────────────── */
@@ -964,13 +1103,61 @@
       align-items: center;
       justify-content: center;
       gap: 14px;
-      padding: 80px 20px;
+      padding: 60px 20px;
       color: var(--muted);
+      animation: fadeSlideUp .5s cubic-bezier(.22,.68,0,1);
+    }
+
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .empty-ico {
       font-size: 48px;
+      opacity: .4;
+      animation: emptyFloat 4s ease-in-out infinite;
+      position: relative;
+    }
+
+    @keyframes emptyFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    /* Orbiting particles around empty icon */
+    .empty-ico::before,
+    .empty-ico::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ac);
       opacity: .3;
+    }
+
+    .empty-ico::before {
+      top: -4px;
+      right: -8px;
+      animation: orbit1 3s linear infinite;
+    }
+
+    .empty-ico::after {
+      bottom: -4px;
+      left: -8px;
+      animation: orbit2 4s linear infinite;
+      background: var(--blue);
+    }
+
+    @keyframes orbit1 {
+      from { transform: rotate(0deg) translateX(28px) rotate(0deg); }
+      to { transform: rotate(360deg) translateX(28px) rotate(-360deg); }
+    }
+
+    @keyframes orbit2 {
+      from { transform: rotate(0deg) translateX(24px) rotate(0deg); }
+      to { transform: rotate(-360deg) translateX(24px) rotate(360deg); }
     }
 
     .empty-title {
@@ -982,7 +1169,34 @@
       font-size: 12px;
       text-align: center;
       line-height: 1.7;
-      max-width: 220px;
+      max-width: 240px;
+    }
+
+    .empty-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      background: var(--acbg);
+      border: 1px solid rgba(124, 106, 245, .25);
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ac2);
+      cursor: pointer;
+      transition: all .2s;
+      font-family: var(--sans);
+      margin-top: 4px;
+    }
+
+    .empty-action:hover {
+      background: rgba(124, 106, 245, .2);
+      border-color: var(--ac);
+      transform: translateY(-1px);
+    }
+
+    .empty-action:active {
+      transform: scale(.96);
     }
 
     /* ── CARD ─────────────────────────────── */
@@ -991,34 +1205,63 @@
       border: 1px solid var(--b1);
       border-radius: var(--r2);
       overflow: hidden;
-      transition: border-color .2s, box-shadow .25s;
+      transition: border-color .2s, box-shadow .35s cubic-bezier(.22,.68,0,1), transform .2s;
       border-left: 3px solid var(--b2);
+      animation: cardSlideIn .4s cubic-bezier(.22,.68,0,1) both;
+    }
+
+    /* Staggered entrance */
+    .card:nth-child(1) { animation-delay: 0s; }
+    .card:nth-child(2) { animation-delay: .04s; }
+    .card:nth-child(3) { animation-delay: .08s; }
+    .card:nth-child(4) { animation-delay: .12s; }
+    .card:nth-child(5) { animation-delay: .16s; }
+    .card:nth-child(6) { animation-delay: .2s; }
+    .card:nth-child(7) { animation-delay: .24s; }
+    .card:nth-child(8) { animation-delay: .28s; }
+    .card:nth-child(n+9) { animation-delay: .3s; }
+
+    @keyframes cardSlideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .card:hover {
       border-color: var(--b2);
+      transform: translateY(-1px);
     }
+
+    /* Per-type card hover glows */
+    .card-pw:hover { box-shadow: 0 4px 20px var(--glow-pw); }
+    .card-bm:hover { box-shadow: 0 4px 20px var(--glow-bm); }
+    .card-nt:hover { box-shadow: 0 4px 20px var(--glow-nt); }
+    .card-td:hover, .todo-card:hover { box-shadow: 0 4px 20px var(--glow-td); }
 
     .card.open {
       border-color: var(--b2);
-      box-shadow: 0 4px 24px rgba(0, 0, 0, .3);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .35);
+      transform: translateY(0);
     }
 
-    /* Per-type card accent borders */
+    /* Per-type card accent borders — gradient fade */
     .card-pw {
-      border-left-color: var(--ac);
+      border-left: 3px solid var(--ac);
+      border-image: linear-gradient(180deg, var(--ac), transparent) 1;
     }
 
     .card-bm {
-      border-left-color: var(--blue);
+      border-left: 3px solid var(--blue);
+      border-image: linear-gradient(180deg, var(--blue), transparent) 1;
     }
 
     .card-nt {
-      border-left-color: var(--amber);
+      border-left: 3px solid var(--amber);
+      border-image: linear-gradient(180deg, var(--amber), transparent) 1;
     }
 
     .card-td {
-      border-left-color: var(--green);
+      border-left: 3px solid var(--green);
+      border-image: linear-gradient(180deg, var(--green), transparent) 1;
     }
 
     .card-top {
@@ -1373,6 +1616,26 @@
       border: 1px solid var(--b1);
       border-radius: var(--r2);
       padding: 14px 16px;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      animation: statSlideIn .4s cubic-bezier(.22,.68,0,1) both;
+    }
+
+    .stat-box:nth-child(1) { animation-delay: 0s; }
+    .stat-box:nth-child(2) { animation-delay: .05s; }
+    .stat-box:nth-child(3) { animation-delay: .1s; }
+    .stat-box:nth-child(4) { animation-delay: .15s; }
+    .stat-box:nth-child(5) { animation-delay: .2s; }
+    .stat-box:nth-child(6) { animation-delay: .25s; }
+
+    @keyframes statSlideIn {
+      from { opacity: 0; transform: translateY(10px) scale(.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .stat-box:hover {
+      transform: translateY(-2px);
+      border-color: var(--b2);
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
     }
 
     .stat-n {
@@ -1986,12 +2249,27 @@
       cursor: pointer;
       box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 0 rgba(124, 106, 245, .2);
       z-index: 50;
-      transition: transform .15s, box-shadow .15s;
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
     }
 
     #fab:active {
-      transform: scale(.91);
+      transform: scale(.85) rotate(90deg);
       box-shadow: 0 2px 12px rgba(124, 106, 245, .3);
+    }
+
+    #fab:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 32px rgba(124, 106, 245, .55);
+    }
+
+    /* Ambient pulse when vault is empty */
+    #fab.pulse-hint {
+      animation: fabPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes fabPulse {
+      0%, 100% { box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 0 rgba(124, 106, 245, .3); }
+      50% { box-shadow: 0 6px 28px rgba(124, 106, 245, .50), 0 0 0 12px rgba(124, 106, 245, 0); }
     }
 
     /* ── MODAL / SHEET ───────────────────────────── */
@@ -2391,26 +2669,127 @@
       position: fixed;
       bottom: calc(78px + max(10px, var(--sbt)));
       left: 50%;
-      transform: translateX(-50%) translateY(14px);
-      background: var(--s3);
+      transform: translateX(-50%) translateY(14px) scale(.95);
+      background: rgba(34, 36, 47, .92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       color: var(--tx);
-      padding: 10px 20px;
-      border-radius: 99px;
+      padding: 11px 20px;
+      border-radius: 14px;
       font-size: 13px;
       font-weight: 600;
       border: 1px solid var(--b2);
       opacity: 0;
-      transition: opacity .22s, transform .22s;
+      transition: opacity .3s cubic-bezier(.22,.68,0,1), transform .3s cubic-bezier(.22,.68,0,1);
       pointer-events: none;
       z-index: 9999;
       white-space: nowrap;
       max-width: 90vw;
       text-align: center;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,.3);
     }
 
     #toast.show {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+
+    /* Toast context colors */
+    #toast.toast-success { border-color: rgba(74, 222, 128, .3); }
+    #toast.toast-error { border-color: rgba(248, 113, 113, .3); }
+    #toast.toast-warn { border-color: rgba(251, 191, 36, .3); }
+    #toast.toast-info { border-color: rgba(96, 165, 250, .3); }
+
+    /* Toast progress bar */
+    #toast-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      background: var(--ac);
+      border-radius: 0 99px 99px 0;
+      transition: width linear;
+    }
+
+    #toast.toast-success #toast-progress { background: var(--green); }
+    #toast.toast-error #toast-progress { background: var(--red); }
+    #toast.toast-warn #toast-progress { background: var(--amber); }
+
+    /* ── STAR BURST ──────────────────────────────── */
+    @keyframes starBurst {
+      0% { transform: scale(1); }
+      30% { transform: scale(1.4); }
+      60% { transform: scale(.9); }
+      100% { transform: scale(1); }
+    }
+
+    .star-burst {
+      animation: starBurst .4s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    /* ── COPY FLASH ──────────────────────────────── */
+    @keyframes copyFlash {
+      0% { background: transparent; }
+      30% { background: rgba(74, 222, 128, .2); }
+      100% { background: transparent; }
+    }
+
+    .copy-flash {
+      animation: copyFlash .6s ease;
+    }
+
+    /* ── VERSION FOOTER ────────────────────────── */
+    .vault-footer {
+      padding: 24px 18px 16px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--faint);
+      line-height: 1.8;
+      letter-spacing: .3px;
+    }
+
+    .vault-footer .vf-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--faint);
+      margin-bottom: 6px;
+    }
+
+    /* ── AUTO-LOCK SETTING ─────────────────────── */
+    .autolock-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .al-pill {
+      padding: 7px 14px;
+      background: var(--s3);
+      border: 1px solid var(--b1);
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: all .15s;
+    }
+
+    .al-pill.on {
+      background: var(--acbg);
+      border-color: var(--ac);
+      color: var(--ac2);
     }
   </style>
 </head>
@@ -2445,28 +2824,30 @@
       </div>
     </div>
 
-    <!-- PIN entry area -->
-    <div id="pin-entry" style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%">
-      <div class="lock-sub" id="pin-label">Enter PIN</div>
-      <div class="pin-dots" id="pin-dots">
-        <div class="pin-dot cursor"></div>
-      </div>
-      <div class="lock-error" id="lock-err"></div>
+    <!-- PIN entry area (glassmorphism card) -->
+    <div class="lock-card">
+      <div id="pin-entry" style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%">
+        <div class="lock-sub" id="pin-label">Enter PIN</div>
+        <div class="pin-dots" id="pin-dots">
+          <div class="pin-dot cursor"></div>
+        </div>
+        <div class="lock-error" id="lock-err"></div>
 
-      <!-- Numpad -->
-      <div class="numpad">
-        <div class="nk" onclick="numpadPress('1')">1</div>
-        <div class="nk" onclick="numpadPress('2')">2</div>
-        <div class="nk" onclick="numpadPress('3')">3</div>
-        <div class="nk" onclick="numpadPress('4')">4</div>
-        <div class="nk" onclick="numpadPress('5')">5</div>
-        <div class="nk" onclick="numpadPress('6')">6</div>
-        <div class="nk" onclick="numpadPress('7')">7</div>
-        <div class="nk" onclick="numpadPress('8')">8</div>
-        <div class="nk" onclick="numpadPress('9')">9</div>
-        <div class="nk nk-back" onclick="numpadBack()">⌫</div>
-        <div class="nk" onclick="numpadPress('0')">0</div>
-        <div class="nk nk-submit dim" id="nk-submit" onclick="handlePinSubmit()">✓</div>
+        <!-- Numpad -->
+        <div class="numpad">
+          <div class="nk" onclick="numpadPress('1')">1</div>
+          <div class="nk" onclick="numpadPress('2')">2</div>
+          <div class="nk" onclick="numpadPress('3')">3</div>
+          <div class="nk" onclick="numpadPress('4')">4</div>
+          <div class="nk" onclick="numpadPress('5')">5</div>
+          <div class="nk" onclick="numpadPress('6')">6</div>
+          <div class="nk" onclick="numpadPress('7')">7</div>
+          <div class="nk" onclick="numpadPress('8')">8</div>
+          <div class="nk" onclick="numpadPress('9')">9</div>
+          <div class="nk nk-back" onclick="numpadBack()">⌫</div>
+          <div class="nk" onclick="numpadPress('0')">0</div>
+          <div class="nk nk-submit dim" id="nk-submit" onclick="handlePinSubmit()">✓</div>
+        </div>
       </div>
     </div>
 
@@ -2551,6 +2932,7 @@
       <div class="hbtn" onclick="triggerSync()" title="Sync to Drive">🔄</div>
       <div class="hbtn" onclick="lockVault()" title="Lock vault">🔒</div>
     </div>
+    <div id="autolock-bar" style="width:100%"></div>
   </div>
 
   <!-- ─── DRIVE BANNER ─────────────────────────────────── -->
@@ -2613,6 +2995,18 @@
     </div>
 
     <div class="set-sec">
+      <div class="set-lbl">Auto-Lock Timer</div>
+      <div class="autolock-pills" id="autolock-pills">
+        <div class="al-pill" onclick="setAutoLock(1,this)">1 min</div>
+        <div class="al-pill" onclick="setAutoLock(2,this)">2 min</div>
+        <div class="al-pill on" onclick="setAutoLock(5,this)">5 min</div>
+        <div class="al-pill" onclick="setAutoLock(10,this)">10 min</div>
+        <div class="al-pill" onclick="setAutoLock(0,this)">Never</div>
+      </div>
+      <div style="font-size:10px;color:var(--faint);margin-top:6px">Vault auto-locks after inactivity</div>
+    </div>
+
+    <div class="set-sec">
       <div class="set-lbl">Sort Order</div>
       <div class="sort-row" id="sort-row">
         <div class="sort-chip on" onclick="setSort('urgency',this)">⚡ Urgency</div>
@@ -2667,6 +3061,13 @@
       <button class="btn primary" onclick="changeMasterPw()" style="padding:12px;margin-top:8px">Update Password</button>
     </div>
 
+    <!-- Version Footer -->
+    <div class="vault-footer">
+      <div class="vf-badge">🔐 VAULT v2.0</div><br>
+      AES-256-GCM · PBKDF2 · End-to-End Encrypted<br>
+      Made with security in mind
+    </div>
+
   </div><!-- /settings -->
 
   <!-- ─── BOTTOM NAV ───────────────────────────────────── -->
@@ -2683,7 +3084,7 @@
   <div id="fab" onclick="openAdd()">＋</div>
 
   <!-- ─── TOAST ───────────────────────────────────────── -->
-  <div id="toast"></div>
+  <div id="toast"><span id="toast-text"></span><div id="toast-progress" style="width:100%"></div></div>
 
   <!-- ─── ADD / EDIT SHEET ─────────────────────────────── -->
   <div class="overlay" id="add-overlay">

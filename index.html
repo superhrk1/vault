@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -2796,7 +2796,7 @@
 
 <body>
 
-  <!-- ─── LOCK SCREEN ─────────────────────────────────── -->
+  <!-- ─── LOCK SCREEN ─────────────────────────────────────── -->
   <div id="lock">
     <div class="lock-glyph">🔐</div>
     <div style="text-align:center">
@@ -2912,14 +2912,14 @@
     <div class="bio-section" id="bio-section">
       <div class="bio-divider">or</div>
       <button class="bio-btn" onclick="biometricUnlock()">
-        <span class="bio-ico">👆</span> Unlock with Fingerprint
-      </button>
+          <svg class="bio-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-3.5 2.5-6 6-6 3.5 0 6 2.5 6 6 0 .5 0 1-.1 1.5"/><path d="M8.5 16.5c.3-1.5.5-3 .5-4.5 0-2 1.5-3.5 3-3.5s3 1.5 3 3.5c0 1-.1 2-.3 3"/><path d="M12 12v4"/></svg> Unlock with Fingerprint
+        </button>
     </div>
 
     <div class="lock-hint" id="lock-hint">Min 4 digits &middot; Locked after 3 wrong attempts</div>
   </div>
 
-  <!-- ─── STATUS BAR ──────────────────────────────────── -->
+  <!-- ─── STATUS BAR ──────────────────────────────────────── -->
   <div id="statusbar">
     <div class="sb-l">
       <div class="sb-logo">🔐 Vault</div>
@@ -2929,13 +2929,13 @@
       </div>
     </div>
     <div class="sb-r">
-      <div class="hbtn" onclick="triggerSync()" title="Sync to Drive">🔄</div>
+      <div class="hbtn" onclick="triggerSync()" title="Sync to Drive"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 16.5-5.3L21.5 8"/><path d="M21.5 12.5a10 10 0 0 1-16.5 5.3L2.5 16"/></svg></div>
       <div class="hbtn" onclick="lockVault()" title="Lock vault">🔒</div>
     </div>
     <div id="autolock-bar" style="width:100%"></div>
   </div>
 
-  <!-- ─── DRIVE BANNER ─────────────────────────────────── -->
+  <!-- ─── DRIVE BANNER ───────────────────────────────────── -->
   <div id="drive-banner">
     <span style="font-size:20px">☁️</span>
     <span id="db-msg">Connect Google Drive to sync across devices</span>
@@ -2943,7 +2943,7 @@
     <span class="db-close" onclick="dismissBanner()">✕</span>
   </div>
 
-  <!-- ─── TABS ─────────────────────────────────────────── -->
+  <!-- ─── TABS ───────────────────────────────────────────── -->
   <div id="tabs">
     <div class="tab on" onclick="switchTab(this,'all')">All</div>
     <div class="tab" onclick="switchTab(this,'password')">Passwords</div>
@@ -2952,20 +2952,20 @@
     <div class="tab" onclick="switchTab(this,'todo')">Todos</div>
   </div>
 
-  <!-- ─── SEARCH ───────────────────────────────────────── -->
+  <!-- ─── SEARCH ─────────────────────────────────────────── -->
   <div id="search-row">
     <div class="sbox">
       <span class="sico">🔍</span>
       <input id="q" class="sinp" type="search" placeholder="Search items…" oninput="onSearch(this)">
       <span id="q-clear" onclick="clearSearch()">✕</span>
     </div>
-    <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">★ Fav</button>
+    <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">⭐ Fav</button>
   </div>
 
-  <!-- ─── TAG FILTER ROW ───────────────────────────────────── -->
+  <!-- ─── TAG FILTER ROW ─────────────────────────────────── -->
   <div id="tag-filter-row">
     <div class="tag-input-wrap">
-      <span class="tag-sico">🏷</span>
+      <span class="tag-sico">🏷️</span>
       <input id="tag-q" placeholder="Filter by tag…" oninput="onTagSearch(this)" autocomplete="off">
       <span id="tag-q-clear" onclick="clearTagSearch()">✕</span>
     </div>
@@ -2973,10 +2973,10 @@
     <div id="selected-tags"></div>
   </div>
 
-  <!-- ─── ITEM LIST ─────────────────────────────────────── -->
+  <!-- ─── ITEM LIST ──────────────────────────────────────── -->
   <div id="list"></div>
 
-  <!-- ─── SETTINGS PAGE ────────────────────────────────── -->
+  <!-- ─── SETTINGS PAGE ──────────────────────────────────── -->
   <div id="settings">
 
     <div class="set-sec">
@@ -3009,7 +3009,7 @@
     <div class="set-sec">
       <div class="set-lbl">Sort Order</div>
       <div class="sort-row" id="sort-row">
-        <div class="sort-chip on" onclick="setSort('urgency',this)">⚡ Urgency</div>
+        <div class="sort-chip on" onclick="setSort('urgency',this)">🔥 Urgency</div>
         <div class="sort-chip" onclick="setSort('name',this)">Name A→Z</div>
         <div class="sort-chip" onclick="setSort('name-d',this)">Name Z→A</div>
         <div class="sort-chip" onclick="setSort('new',this)">Newest</div>
@@ -3021,9 +3021,9 @@
     <div class="set-sec">
       <div class="set-lbl">Import / Export</div>
       <div class="data-btn-row">
-        <button class="data-btn" onclick="exportJSON()">📦 Export JSON</button>
-        <button class="data-btn" onclick="exportCSV()">📄 Export CSV</button>
-        <button class="data-btn" onclick="pickImport()">📥 Import</button>
+        <button class="data-btn" onclick="exportJSON()">📋 Export JSON</button>
+        <button class="data-btn" onclick="exportCSV()">📋 Export CSV</button>
+        <button class="data-btn" onclick="pickImport()">📦 Import</button>
       </div>
       <input type="file" id="imp-file" accept=".json" style="display:none" onchange="doImport(event)">
     </div>
@@ -3063,14 +3063,14 @@
 
     <!-- Version Footer -->
     <div class="vault-footer">
-      <div class="vf-badge">🔐 VAULT v2.0</div><br>
+      <div class="vf-badge">🔏 VAULT v2.0</div><br>
       AES-256-GCM · PBKDF2 · End-to-End Encrypted<br>
       Made with security in mind
     </div>
 
   </div><!-- /settings -->
 
-  <!-- ─── BOTTOM NAV ───────────────────────────────────── -->
+  <!-- ─── BOTTOM NAV ─────────────────────────────────────── -->
   <div id="nav">
     <div class="nav-item on" id="nav-home" onclick="showPage('home')">
       <span class="ni">🏠</span><span>Home</span>
@@ -3080,13 +3080,13 @@
     </div>
   </div>
 
-  <!-- ─── FAB ─────────────────────────────────────────── -->
+  <!-- ─── FAB ────────────────────────────────────────────── -->
   <div id="fab" onclick="openAdd()">＋</div>
 
-  <!-- ─── TOAST ───────────────────────────────────────── -->
+  <!-- ─── TOAST ──────────────────────────────────────────── -->
   <div id="toast"><span id="toast-text"></span><div id="toast-progress" style="width:100%"></div></div>
 
-  <!-- ─── ADD / EDIT SHEET ─────────────────────────────── -->
+  <!-- ─── ADD / EDIT SHEET ───────────────────────────────── -->
   <div class="overlay" id="add-overlay">
     <div class="sheet">
       <div class="shdl"></div>
@@ -3099,7 +3099,7 @@
     </div>
   </div>
 
-  <!-- ─── CONFIRM SHEET ────────────────────────────────── -->
+  <!-- ─── CONFIRM SHEET ──────────────────────────────────── -->
   <div class="overlay" id="confirm-overlay">
     <div class="sheet">
       <div class="shdl"></div>
@@ -3119,7 +3119,7 @@
 
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
-  <!-- ─── SCRIPTS ─────────────────────────────────────── -->
+  <!-- ─── SCRIPTS ────────────────────────────────────────── -->
   <script src="config.js?v=15"></script>
   <script src="app.js?v=15"></script>
 </body>

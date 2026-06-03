@@ -1486,9 +1486,9 @@ function askDelete(id) {
   $("confirm-ok").textContent     = "Delete";
   $("confirm-ok").onclick = async () => {
     STATE.expandedId = null;
-    await removeItem(id);
     closeOverlay("confirm-overlay");
     toast("Deleted");
+    await removeItem(id);
   };
   openOverlay("confirm-overlay");
 }

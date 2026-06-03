@@ -242,7 +242,11 @@ async function setupVault(pw) {
   $("lock-hint").style.display = "none";
   $("bio-section").classList.remove("show");
   $("forgot-link").style.display = "none";
+  // Hide the glassmorphism card so it doesn't show empty
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("sq-setup").style.display = "flex";
+  // Reset bio-asked flag so new vault users get the prompt
+  LS.del("vault_bio_asked");
 }
 
 function openApp() {
@@ -285,6 +289,8 @@ function lockVault() {
   $("sq-setup").style.display = "none";
   $("pin-entry").style.display = "flex";
   $("lock-hint").style.display = "";
+  // Ensure lock-card is visible
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
 }
 
 function setLockErr(msg) { $("lock-err").textContent = msg; }
@@ -307,6 +313,8 @@ function applyLockout(until) {
   $("forgot-link").style.display = "none";
   $("sq-recovery").style.display = "none";
   $("bio-section").classList.remove("show");
+  // Hide lock-card during lockout
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("lock-blocked").classList.add("show"); setLockErr("");
   // Show SQ bypass if configured
   const sqQ = LS.get("vault_sq_question");
@@ -331,6 +339,8 @@ function endLockout() {
   $("lock-blocked").classList.remove("show");
   // Clear SQ inputs
   const lbAns = $("lb-sq-ans"); if (lbAns) lbAns.value = "";
+  // Re-show lock-card and PIN entry
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
   $("pin-entry").style.display = "flex"; $("lock-hint").style.display = "";
   _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim");
   // Re-show forgot link and biometric if available
@@ -376,6 +386,8 @@ function showForgotPIN() {
   $("lock-hint").style.display = "none";
   $("forgot-link").style.display = "none";
   $("bio-section").classList.remove("show");
+  // Hide lock-card during recovery
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("sq-rec-q").textContent = question;
   $("sq-rec-ans").value = "";
   $("sq-rec-err").textContent = "";
@@ -385,6 +397,8 @@ function showForgotPIN() {
 
 function backToPin() {
   $("sq-recovery").style.display = "none";
+  // Re-show lock-card
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
   $("pin-entry").style.display = "flex";
   $("lock-hint").style.display = "";
   $("forgot-link").style.display = "";
@@ -416,6 +430,8 @@ function startPinReset() {
   _pinResetConfirm = null;
   _pin = "";
   clearFailCount();
+  // Re-show lock-card for PIN entry
+  const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
   $("pin-entry").style.display = "flex";
   $("lock-hint").style.display = "";
   $("forgot-link").style.display = "none";

@@ -992,7 +992,7 @@ function switchTab(el, t) {
     if (dashEl) dashEl.style.display = "none";
     if (listEl) listEl.style.display = "flex";
     if (searchEl) searchEl.style.display = "";
-    if (tagEl) tagEl.style.display = "flex";
+    if (tagEl) tagEl.style.display = "";
     renderList();
   }
 }
@@ -1025,7 +1025,9 @@ function getItemUrgency(item) {
     if (days < 30)  return 4;
   }
   if (item.priority === "high") return 5;
-  return 6;
+  if (item.priority === "medium") return 6;
+  if (item.priority === "low") return 8;
+  return 7;
 }
 
 function filtered() {
@@ -1083,7 +1085,7 @@ function cardHTML(item) {
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
   const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
   const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
-  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
+  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : item.priority === "medium" ? `<span class="bpill bpm">◉</span>` : item.priority === "low" ? `<span class="bpill bpl">▽</span>` : "";
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
@@ -1318,13 +1320,15 @@ async function toggleFav(id) {
 function openAdd() {
   STATE.editId    = null;
   STATE.mTags     = [];
-  STATE.mType     = "password";
-  STATE.mPriority = "high";
+  // Auto-detect type from current tab
+  const tabType = ["password","bookmark","note","todo"].includes(STATE.tab) ? STATE.tab : "password";
+  STATE.mType     = tabType;
+  STATE.mPriority = "normal";
   STATE.mSubitems = [];
-  STATE.mColor    = "purple";
+  STATE.mColor    = TODO_COLORS[Math.floor(Math.random() * TODO_COLORS.length)].name;
   STATE.mDashboard = false;
   $("add-title").textContent = "Add Item";
-  buildForm("password", null);
+  buildForm(tabType, null);
   openOverlay("add-overlay");
 }
 
@@ -1395,15 +1399,11 @@ function buildForm(type, pre) {
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Note title" value="${esc(pre?.title||"")}"></div>
       <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "todo") {
-    const colorPicker = TODO_COLORS.map(c =>
-      `<div class="color-dot${STATE.mColor===c.name?" on":""}" style="background:${c.hex}" onclick="selectColor('${c.name}')"></div>`
-    ).join("");
     const subItems = STATE.mSubitems.map((s,i) =>
       `<div class="subitem-row"><span class="sub-drag">⋮⋮</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Sub-item…" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})">✕</span></div>`
     ).join("");
     fields = `
       <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Todo title" value="${esc(pre?.title||"")}" autocomplete="off"></div>
-      <div class="fg"><div class="fl">Color</div><div class="color-picker">${colorPicker}</div></div>
       <div class="fg"><div class="fl">Sub-items</div>
         <div id="subitems-list">${subItems}</div>
         <div class="add-sub-btn" onclick="addSubitem()">＋ Add Sub-item</div>
@@ -1416,7 +1416,9 @@ function buildForm(type, pre) {
       <div class="fl">Priority</div>
       <div class="pri-row">
         <div class="pricard hi${STATE.mPriority==="high"?" on":""}" onclick="selectPri('high',this)"><span class="prico">⚡</span>High</div>
+        <div class="pricard med${STATE.mPriority==="medium"?" on":""}" onclick="selectPri('medium',this)"><span class="prico">◉</span>Medium</div>
         <div class="pricard${STATE.mPriority==="normal"?" on":""}" onclick="selectPri('normal',this)"><span class="prico">○</span>Normal</div>
+        <div class="pricard lo${STATE.mPriority==="low"?" on":""}" onclick="selectPri('low',this)"><span class="prico">▽</span>Low</div>
       </div>
     </div>`;
 

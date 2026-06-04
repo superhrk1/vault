@@ -880,6 +880,18 @@
       border: 1px solid rgba(248, 113, 113, .28);
     }
 
+    .bpm {
+      background: rgba(251, 191, 36, .14);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, .25);
+    }
+
+    .bpl {
+      background: rgba(96, 165, 250, .12);
+      color: #60a5fa;
+      border: 1px solid rgba(96, 165, 250, .22);
+    }
+
     /* ── PRIORITY SELECTOR in form ───────────────── */
     .pri-row {
       display: flex;
@@ -915,6 +927,18 @@
       color: #f87171;
     }
 
+    .pricard.med.on {
+      border-color: rgba(251, 191, 36, .5);
+      background: rgba(251, 191, 36, .12);
+      color: #fbbf24;
+    }
+
+    .pricard.lo.on {
+      border-color: rgba(96, 165, 250, .5);
+      background: rgba(96, 165, 250, .12);
+      color: #60a5fa;
+    }
+
     .prico {
       font-size: 16px;
     }
@@ -924,7 +948,7 @@
       flex-shrink: 0;
       background: var(--s1);
       border-bottom: 1px solid var(--b1);
-      padding: 7px 14px 8px;
+      padding: 0 14px 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -3109,23 +3133,23 @@
     <div class="tab" onclick="switchTab(this,'todo')">Todos</div>
   </div>
 
-  <!-- ─── SEARCH ─────────────────────────────────────────── -->
+  <!-- ─── SEARCH + TAG FILTER ───────────────────────────── -->
   <div id="search-row">
     <div class="sbox">
       <span class="sico">🔍</span>
       <input id="q" class="sinp" type="search" placeholder="Search items…" oninput="onSearch(this)">
       <span id="q-clear" onclick="clearSearch()">✕</span>
     </div>
+    <div class="sbox" style="max-width:180px">
+      <span class="tag-sico">🏷️</span>
+      <input id="tag-q" class="sinp" placeholder="Tag…" oninput="onTagSearch(this)" autocomplete="off" style="padding-left:30px">
+      <span id="tag-q-clear" onclick="clearTagSearch()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;cursor:pointer;color:var(--faint);display:none">✕</span>
+    </div>
     <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">⭐ Fav</button>
   </div>
 
-  <!-- ─── TAG FILTER ROW ─────────────────────────────────── -->
+  <!-- ─── TAG AUTOCOMPLETE / SELECTED ──────────────────── -->
   <div id="tag-filter-row">
-    <div class="tag-input-wrap">
-      <span class="tag-sico">🏷️</span>
-      <input id="tag-q" placeholder="Filter by tag…" oninput="onTagSearch(this)" autocomplete="off">
-      <span id="tag-q-clear" onclick="clearTagSearch()">✕</span>
-    </div>
     <div id="tag-autocomplete"></div>
     <div id="selected-tags"></div>
   </div>
@@ -3213,12 +3237,11 @@
           <span class="set-group-arrow" style="color:var(--red)">›</span>
         </div>
       </div>
-      <div class="fg" style="margin-top:14px">
-        <div class="fl">New Master Password</div>
-        <input id="new-pw" class="fi mono" type="password" placeholder="Enter new password…"
-          autocomplete="new-password">
+      <div style="display:flex;gap:8px;align-items:stretch;margin-top:14px">
+        <input id="new-pw" class="fi mono" type="password" placeholder="New password…"
+          autocomplete="new-password" style="flex:1;margin:0">
+        <button class="btn primary" onclick="changeMasterPw()" style="padding:12px 18px;flex:none;white-space:nowrap">Update</button>
       </div>
-      <button class="btn primary" onclick="changeMasterPw()" style="padding:12px;margin-top:8px">Update Password</button>
     </div>
 
     <!-- Install App Section -->
@@ -3293,8 +3316,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="config.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 
 </html>

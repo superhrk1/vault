@@ -140,6 +140,21 @@ async function boot() {
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   STATE.drive.status = configured ? (STATE.drive.token ? "synced" : "offline") : "noconfig";
   const hasVault = !!LS.get("vault_hash");
+  // Auto-unlock if session key exists (page refresh)
+  const sessionPin = sessionStorage.getItem("vault_session_key");
+  if (hasVault && sessionPin) {
+    try {
+      const ok = await Crypto.verifyPassword(sessionPin, LS.get("vault_hash"));
+      if (ok) {
+        STATE.masterKey = sessionPin;
+        await loadItems();
+        renderSyncBadge();
+        openApp();
+        return;
+      }
+    } catch(e) {}
+    sessionStorage.removeItem("vault_session_key");
+  }
   if (!hasVault) {
     $("pin-label").textContent = "Create a PIN";
     $("lock-hint").textContent = "Choose a numeric PIN (min 4 digits)";
@@ -229,7 +244,9 @@ async function handlePinSubmit() {
     else { setLockErr("Wrong PIN — " + remaining + " attempt" + (remaining===1?"":"s") + " left"); shakeDots(); }
     _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
   }
-  clearFailCount(); STATE.masterKey = _pin; _pin = "";
+  clearFailCount(); STATE.masterKey = _pin;
+  sessionStorage.setItem("vault_session_key", _pin);
+  _pin = "";
   await loadItems(); openApp();
 }
 
@@ -279,6 +296,7 @@ function openApp() {
 function lockVault() {
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
+  sessionStorage.removeItem("vault_session_key");
   stopAutoLock();
   $("lock").classList.remove("gone"); setLockErr(""); renderPinDots();
   const btn = $("nk-submit"); if (btn) btn.classList.add("dim");

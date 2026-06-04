@@ -1932,6 +1932,60 @@ function clearTagSearch() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  PWA INSTALL PROMPT
+// ══════════════════════════════════════════════════════════
+let _deferredInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  showInstallSection();
+});
+
+window.addEventListener("appinstalled", () => {
+  _deferredInstallPrompt = null;
+  markAsInstalled();
+  toast("Vault installed ✓", "success");
+});
+
+function showInstallSection() {
+  const sec = $("install-section");
+  if (sec) sec.classList.add("show");
+}
+
+function markAsInstalled() {
+  const sec = $("install-section");
+  if (sec) sec.classList.add("show");
+  const btn = $("install-btn");
+  if (btn) {
+    btn.textContent = "Installed ✓";
+    btn.classList.add("installed");
+    btn.onclick = null;
+  }
+}
+
+async function installPWA() {
+  if (!_deferredInstallPrompt) {
+    toast("Use your browser's menu to install this app");
+    return;
+  }
+  _deferredInstallPrompt.prompt();
+  const result = await _deferredInstallPrompt.userChoice;
+  if (result.outcome === "accepted") {
+    _deferredInstallPrompt = null;
+  }
+}
+
+// Check if already running as installed PWA
+function checkInstalledState() {
+  if (window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true) {
+    markAsInstalled();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 //  START
 // ══════════════════════════════════════════════════════════
 boot();
+checkInstalledState();

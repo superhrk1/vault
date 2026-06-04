@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -2791,6 +2791,87 @@
       border-color: var(--ac);
       color: var(--ac2);
     }
+
+    /* ── PWA INSTALL SECTION ─────────────────────── */
+    #install-section {
+      display: none;
+    }
+    #install-section.show {
+      display: block;
+    }
+    .install-card {
+      background: linear-gradient(135deg, rgba(124, 106, 245, .10), rgba(96, 165, 250, .08));
+      border: 1px solid rgba(124, 106, 245, .22);
+      border-radius: var(--r2);
+      padding: 18px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .install-card:hover {
+      border-color: rgba(124, 106, 245, .35);
+      box-shadow: 0 4px 20px rgba(124, 106, 245, .12);
+    }
+    .install-ico {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--acbg);
+      border: 1px solid rgba(124, 106, 245, .18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .install-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .install-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tx);
+    }
+    .install-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+    .install-btn {
+      padding: 9px 18px;
+      background: linear-gradient(135deg, var(--ac), #9b8afb);
+      border: none;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      font-family: var(--sans);
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+      box-shadow: 0 2px 12px rgba(124, 106, 245, .35);
+      letter-spacing: .3px;
+    }
+    .install-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(124, 106, 245, .45);
+    }
+    .install-btn:active {
+      transform: scale(.95);
+      box-shadow: 0 1px 6px rgba(124, 106, 245, .3);
+    }
+    .install-btn.installed {
+      background: var(--gbg);
+      color: var(--green);
+      box-shadow: none;
+      cursor: default;
+      pointer-events: none;
+      border: 1px solid rgba(74, 222, 128, .2);
+    }
   </style>
 </head>
 
@@ -3061,6 +3142,19 @@
       <button class="btn primary" onclick="changeMasterPw()" style="padding:12px;margin-top:8px">Update Password</button>
     </div>
 
+    <!-- Install App Section -->
+    <div class="set-sec" id="install-section">
+      <div class="set-lbl">Install App</div>
+      <div class="install-card">
+        <div class="install-ico">📲</div>
+        <div class="install-info">
+          <div class="install-name">Install Vault</div>
+          <div class="install-sub">Add to home screen for quick access, offline support & full-screen mode</div>
+        </div>
+        <button class="install-btn" id="install-btn" onclick="installPWA()">Install</button>
+      </div>
+    </div>
+
     <!-- Version Footer -->
     <div class="vault-footer">
       <div class="vf-badge">🔏 VAULT v2.0</div><br>
@@ -3120,8 +3214,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="config.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 
 </html>

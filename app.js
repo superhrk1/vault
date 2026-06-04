@@ -66,7 +66,7 @@ const Crypto = {
 let STATE = {
   masterKey        : null,
   items            : [],
-  tab              : "all",
+  tab              : "dash",
   favOnly          : false,
   activeTags       : [],
   sort             : "urgency",   // urgency | name | name-d | new | old | type
@@ -78,6 +78,7 @@ let STATE = {
   mPriority        : "high",
   mSubitems        : [],
   mColor           : "purple",
+  mDashboard       : false,
   autoLockMin      : 5,
   drive: {
     token     : null,
@@ -251,7 +252,7 @@ async function setupVault(pw) {
 
 function openApp() {
   $("lock").classList.add("gone");
-  renderAll(); updateStats(); renderDrivePanel();
+  renderAll(); renderDashboard(); showPage("home"); updateStats(); renderDrivePanel();
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   // Check if user just returned from OAuth (fresh connect)
   if (STATE.drive.token && !STATE.drive.lastSync) {
@@ -970,9 +971,30 @@ function toggleFavFilter() {
 
 function switchTab(el, t) {
   STATE.tab = t;
+  // Close any expanded items when switching tabs
+  STATE.expandedId = null;
+  STATE.pwVisible = {};
+  _dashExpanded = null;
   document.querySelectorAll(".tab").forEach(e => e.classList.remove("on"));
   el.classList.add("on");
-  renderList();
+  const isDash = t === "dash";
+  const dashEl = $("dashboard");
+  const listEl = $("list");
+  const searchEl = $("search-row");
+  const tagEl = $("tag-filter-row");
+  if (isDash) {
+    if (dashEl) dashEl.style.display = "flex";
+    if (listEl) listEl.style.display = "none";
+    if (searchEl) searchEl.style.display = "none";
+    if (tagEl) tagEl.style.display = "none";
+    renderDashboard();
+  } else {
+    if (dashEl) dashEl.style.display = "none";
+    if (listEl) listEl.style.display = "flex";
+    if (searchEl) searchEl.style.display = "";
+    if (tagEl) tagEl.style.display = "flex";
+    renderList();
+  }
 }
 
 function onSearch(inp) {
@@ -1009,7 +1031,7 @@ function getItemUrgency(item) {
 function filtered() {
   const q = ($("q")?.value || "").toLowerCase();
   let r = STATE.items.filter(i => {
-    if (STATE.tab !== "all" && i.type !== STATE.tab) return false;
+    if (STATE.tab !== "all" && STATE.tab !== "dash" && i.type !== STATE.tab) return false;
     if (STATE.favOnly && !i.fav) return false;
     if (STATE.activeTags.length > 0 && !STATE.activeTags.some(t => (i.tags||[]).includes(t))) return false;
     if (!q) return true;
@@ -1300,6 +1322,7 @@ function openAdd() {
   STATE.mPriority = "high";
   STATE.mSubitems = [];
   STATE.mColor    = "purple";
+  STATE.mDashboard = false;
   $("add-title").textContent = "Add Item";
   buildForm("password", null);
   openOverlay("add-overlay");
@@ -1314,6 +1337,7 @@ function openEdit(id) {
   STATE.mPriority = item.priority || "normal";
   STATE.mSubitems = (item.subitems||[]).map(s => ({...s}));
   STATE.mColor    = item.color || "purple";
+  STATE.mDashboard = item.dashboard || false;
   $("add-title").textContent = "Edit Item";
   buildForm(item.type, item);
   openOverlay("add-overlay");
@@ -1413,7 +1437,21 @@ function buildForm(type, pre) {
       <div class="chips" id="mchips">${renderChips()}</div>
     </div>`;
 
-  body.innerHTML = typeGrid + fields + priorityBlock + flagBlock + tagsBlock;
+  const dashBlock = `
+    <div class="fg">
+      <div class="fl">Add to Dashboard</div>
+      <div class="dash-toggle-row">
+        <div class="dash-toggle-info">
+          <span style="font-size:16px">📊</span>
+          <span style="font-size:12px;color:var(--muted)">Show on Today's Plan</span>
+        </div>
+        <div class="dash-switch${STATE.mDashboard ? ' on' : ''}" id="f-dash-switch" onclick="toggleDashSwitch()">
+          <div class="dash-switch-knob"></div>
+        </div>
+      </div>
+    </div>`;
+
+  body.innerHTML = typeGrid + fields + priorityBlock + flagBlock + tagsBlock + dashBlock;
   foot.innerHTML = `
     <button class="btn ghost" onclick="closeOverlay('add-overlay')">Cancel</button>
     <button class="btn primary" onclick="submitItem()">${STATE.editId?"Save Changes":"Add Item"}</button>`;
@@ -1428,6 +1466,12 @@ function selectPri(val, el) {
   STATE.mPriority = val;
   document.querySelectorAll(".pricard").forEach(c => c.classList.remove("on"));
   el.classList.add("on");
+}
+
+function toggleDashSwitch() {
+  STATE.mDashboard = !STATE.mDashboard;
+  const sw = $("f-dash-switch");
+  if (sw) sw.classList.toggle("on", STATE.mDashboard);
 }
 
 function switchType(type, el) {
@@ -1528,6 +1572,7 @@ async function submitItem() {
     tags     : [...STATE.mTags],
     priority : STATE.mPriority || "normal",
     flagDate : fv("f-flagDate") || null,
+    dashboard: STATE.mDashboard || false,
   };
   // Todo-specific fields
   if (itemType === "todo") {
@@ -1798,6 +1843,185 @@ function updateFabPulse() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  DASHBOARD — opt-in via item.dashboard flag
+// ══════════════════════════════════════════════════════════
+let _dashExpanded = null;
+
+function todayKey() {
+  const d = new Date();
+  return `vault_dash_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function getDashState() { return LS.get(todayKey()) || { completed: [], order: [] }; }
+function saveDashState(s) { LS.set(todayKey(), s); }
+
+function getDashItems() {
+  return STATE.items.filter(item => item.dashboard === true);
+}
+
+function renderDashboard() {
+  const el = $("dashboard");
+  if (!el) return;
+
+  const allDash = getDashItems();
+  const ds = getDashState();
+  const completedIds = new Set(ds.completed);
+  let pending = allDash.filter(i => !completedIds.has(i.id));
+  const completed = allDash.filter(i => completedIds.has(i.id));
+
+  // Apply custom order
+  if (ds.order.length) {
+    const om = {}; ds.order.forEach((id,i) => om[id] = i);
+    pending.sort((a,b) => (om[a.id] ?? 9999) - (om[b.id] ?? 9999));
+  }
+  // Persist order
+  const curOrd = pending.map(i => i.id);
+  if (JSON.stringify(curOrd) !== JSON.stringify(ds.order)) { ds.order = curOrd; saveDashState(ds); }
+
+  const total = allDash.length, doneN = completed.length, pendN = pending.length;
+  const pct = total ? Math.round(doneN / total * 100) : 0;
+  const dateStr = new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+  const r = 23, circ = 2*Math.PI*r, offset = circ - (pct/100)*circ;
+
+  let html = `<div class="dash-header">
+    <div class="dash-ring">
+      <svg width="56" height="56" viewBox="0 0 56 56">
+        <circle class="dash-ring-bg" cx="28" cy="28" r="${r}" fill="none" stroke-width="5"/>
+        <circle class="dash-ring-fg" cx="28" cy="28" r="${r}" fill="none" stroke-width="5"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="dash-ring-txt">${pct}%</div>
+    </div>
+    <div class="dash-info">
+      <div class="dash-title">Today's Plan</div>
+      <div class="dash-date">${dateStr}</div>
+      <div class="dash-pills">
+        <span class="dash-pill pending">${pendN} Pending</span>
+        <span class="dash-pill done">${doneN} Done</span>
+      </div>
+    </div>
+  </div>`;
+
+  if (!allDash.length) {
+    html += `<div class="dash-empty">
+      <div class="dash-empty-ico">📋</div>
+      <div class="dash-empty-msg">No items on your dashboard yet.<br>Toggle "Add to Dashboard" when creating items.</div>
+    </div>`;
+    el.innerHTML = html; return;
+  }
+
+  if (pending.length) {
+    html += `<div class="dash-sec-label">⏳ Pending · ${pendN}</div>`;
+    pending.forEach((item,idx) => { html += dashCardHTML(item,false,idx,pending.length); });
+  }
+  if (completed.length) {
+    html += `<div class="dash-sec-label">✅ Completed · ${doneN}</div>`;
+    completed.forEach(item => { html += dashCardHTML(item,true,-1,-1); });
+  }
+  el.innerHTML = html;
+}
+
+function dashCardHTML(item, isDone, idx, total) {
+  const TSUB = {password:"🔑",bookmark:"🔖",note:"📝",todo:"✅"};
+  const DCLS = {password:"dc-pw",bookmark:"dc-bm",note:"dc-nt",todo:"dc-td"};
+  const sub = item.type==="todo"
+    ? `${(item.subitems||[]).filter(s=>s.done).length}/${(item.subitems||[]).length} sub-items`
+    : (item.username||item.url||(item.note||"").slice(0,40)||"");
+  const ago = getItemAge(item);
+  const isExp = _dashExpanded === item.id;
+
+  let arrows = "";
+  if (!isDone && total > 1) {
+    const upSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>`;
+    const dnSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    arrows = `<div class="dcard-arrows">
+      <button class="darr" onclick="event.stopPropagation();dashMoveUp('${item.id}')"${idx===0?' style="visibility:hidden"':''}>${upSvg}</button>
+      <button class="darr" onclick="event.stopPropagation();dashMoveDown('${item.id}')"${idx===total-1?' style="visibility:hidden"':''}>${dnSvg}</button>
+    </div>`;
+  }
+
+  return `<div class="dcard ${DCLS[item.type]||""}${isDone?" done-card":""}${isExp?" open":""}" id="dc-${item.id}">
+    <div class="dcard-top" onclick="dashToggleExpand('${item.id}')">
+      <div class="dcheck${isDone?" checked":""}" onclick="event.stopPropagation();dashToggleDone('${item.id}')">${isDone?"✓":""}</div>
+      <div class="dcard-mid">
+        <div class="dcard-title">${TSUB[item.type]||"📄"} ${esc(item.title||"Untitled")}${ago?` <span class="ct-ago">${ago}</span>`:""}</div>
+        <div class="dcard-sub">${esc(sub)}</div>
+      </div>
+      ${arrows}
+      <div class="dcard-expand">⌄</div>
+    </div>
+    ${isExp?`<div class="dcard-detail">${dashDetailHTML(item)}</div>`:""}
+  </div>`;
+}
+
+function dashDetailHTML(item) {
+  let h = "";
+  if (item.username) h += `<div class="dd-row"><span class="dd-label">User</span><span class="dd-val">${esc(item.username)}</span></div>`;
+  if (item.password) h += `<div class="dd-row"><span class="dd-label">Pass</span><span class="dd-val" style="color:var(--faint);letter-spacing:3px">••••••••</span></div>`;
+  if (item.url) h += `<div class="dd-row"><span class="dd-label">URL</span><span class="dd-val" style="color:var(--blue)">${esc(item.url)}</span></div>`;
+  if (item.email) h += `<div class="dd-row"><span class="dd-label">Email</span><span class="dd-val">${esc(item.email)}</span></div>`;
+
+  if (item.type==="todo" && Array.isArray(item.subitems) && item.subitems.length) {
+    h += `<div style="margin-bottom:6px">`;
+    item.subitems.forEach(s => {
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer" onclick="event.stopPropagation();toggleTodoDone('${item.id}','${s.id}');setTimeout(renderDashboard,100)">
+        <span style="color:${s.done?'var(--green)':'var(--faint)'}">${s.done?'✓':'○'}</span>
+        <span style="${s.done?'text-decoration:line-through;color:var(--faint)':'color:var(--tx)'}">${esc(s.text)}</span>
+      </div>`;
+    });
+    h += `</div>`;
+  }
+
+  if (item.note) h += `<div class="dd-note">${esc(item.note).replace(/\n/g,"<br>")}</div>`;
+  if ((item.tags||[]).length) h += `<div class="dd-tags">${item.tags.map(t=>`<span class="dd-tag">#${esc(t)}</span>`).join("")}</div>`;
+  if (item.flagDate) {
+    const days = Math.ceil((new Date(item.flagDate).getTime()-Date.now())/86400000);
+    h += `<div class="dd-meta"><span>📅 ${item.flagDate} · ${days<0?Math.abs(days)+'d overdue':days===0?'Due today':days+'d left'}</span></div>`;
+  }
+
+  // Action buttons
+  h += `<div class="dd-actions">
+    <button class="dd-act" onclick="event.stopPropagation();openEdit('${item.id}')" style="color:var(--ac2)">✏️ Edit</button>
+    <button class="dd-act" onclick="event.stopPropagation();askDelete('${item.id}')" style="color:var(--red)">🗑 Delete</button>
+  </div>`;
+
+  return h;
+}
+
+function dashToggleDone(id) {
+  const ds = getDashState();
+  const idx = ds.completed.indexOf(id);
+  if (idx >= 0) { ds.completed.splice(idx,1); ds.order.push(id); }
+  else { ds.completed.push(id); ds.order = ds.order.filter(o=>o!==id); }
+  saveDashState(ds); vibrate(25); renderDashboard();
+}
+
+function dashMoveUp(id) {
+  const ds = getDashState();
+  if (!ds.order.length) ds.order = getDashItems().filter(i=>!ds.completed.includes(i.id)).map(i=>i.id);
+  const idx = ds.order.indexOf(id);
+  if (idx <= 0) return;
+  [ds.order[idx],ds.order[idx-1]] = [ds.order[idx-1],ds.order[idx]];
+  saveDashState(ds); renderDashboard();
+  requestAnimationFrame(()=>$("dc-"+id)?.scrollIntoView({behavior:"smooth",block:"nearest"}));
+}
+
+function dashMoveDown(id) {
+  const ds = getDashState();
+  if (!ds.order.length) ds.order = getDashItems().filter(i=>!ds.completed.includes(i.id)).map(i=>i.id);
+  const idx = ds.order.indexOf(id);
+  if (idx < 0 || idx >= ds.order.length-1) return;
+  [ds.order[idx],ds.order[idx+1]] = [ds.order[idx+1],ds.order[idx]];
+  saveDashState(ds); renderDashboard();
+  requestAnimationFrame(()=>$("dc-"+id)?.scrollIntoView({behavior:"smooth",block:"nearest"}));
+}
+
+function dashToggleExpand(id) {
+  _dashExpanded = _dashExpanded===id ? null : id;
+  renderDashboard();
+  if (_dashExpanded) requestAnimationFrame(()=>$("dc-"+id)?.scrollIntoView({behavior:"smooth",block:"nearest"}));
+}
+
+// ══════════════════════════════════════════════════════════
 //  ANIMATED STAT COUNTERS
 // ══════════════════════════════════════════════════════════
 function animateCounter(el, target) {
@@ -1821,17 +2045,21 @@ function animateCounter(el, target) {
 // ══════════════════════════════════════════════════════════
 function showPage(p) {
   const home = p === "home";
-  ["statusbar","tabs","search-row","list"].forEach(id => {
-    const el = $(id); if (el) el.style.display = id==="list" ? (home?"flex":"none") : (home?"":"none");
+  const isDash = STATE.tab === "dash";
+  ["statusbar","tabs"].forEach(id => {
+    const el = $(id); if (el) el.style.display = home ? "" : "none";
   });
-  const tfr = $("tag-filter-row");
-  if (tfr) tfr.style.display = home ? "flex" : "none";
+  if ($("search-row")) $("search-row").style.display = (home && !isDash) ? "" : "none";
+  if ($("tag-filter-row")) $("tag-filter-row").style.display = (home && !isDash) ? "flex" : "none";
+  if ($("list")) $("list").style.display = (home && !isDash) ? "flex" : "none";
+  if ($("dashboard")) $("dashboard").style.display = (home && isDash) ? "flex" : "none";
   $("drive-banner").style.display = (home && !STATE.drive.token && !LS.get("drive_banner_dismissed")) ? "flex" : "none";
   $("settings").classList.toggle("show", !home);
   $("fab").style.display = home ? "flex" : "none";
   $("nav-home").classList.toggle("on", home);
   $("nav-set").classList.toggle("on", !home);
   if (!home) { updateStats(); renderDrivePanel(); renderSQSettings(); }
+  if (home && isDash) renderDashboard();
 }
 
 function dismissBanner() {

@@ -1091,7 +1091,7 @@
     #list {
       flex: 1;
       overflow-y: auto;
-      padding: 10px 14px 100px;
+      padding: 10px 14px 140px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -2807,7 +2807,7 @@
 
     /* ── PWA INSTALL SECTION ─────────────────────── */
     #install-section {
-      display: none;
+      display: block;
     }
     #install-section.show {
       display: block;
@@ -2885,7 +2885,69 @@
       pointer-events: none;
       border: 1px solid rgba(74, 222, 128, .2);
     }
-  </style>
+  
+    /* DASHBOARD */
+    #dashboard { flex:1; overflow-y:auto; padding:10px 14px 140px; display:none; flex-direction:column; gap:10px; }
+    .dash-header { background:var(--s1); border:1px solid var(--b1); border-radius:var(--r2); padding:18px 16px; display:flex; align-items:center; gap:16px; animation:cardSlideIn .4s cubic-bezier(.22,.68,0,1) both; }
+    .dash-ring { position:relative; width:56px; height:56px; flex-shrink:0; }
+    .dash-ring svg { transform:rotate(-90deg); }
+    .dash-ring-bg { stroke:var(--s3); }
+    .dash-ring-fg { stroke:var(--ac); transition:stroke-dashoffset .6s cubic-bezier(.22,.68,0,1); stroke-linecap:round; }
+    .dash-ring-txt { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:var(--tx); letter-spacing:-1px; }
+    .dash-info { flex:1; min-width:0; }
+    .dash-title { font-size:16px; font-weight:700; color:var(--tx); }
+    .dash-date { font-size:11px; color:var(--ac2); font-weight:600; margin-top:2px; }
+    .dash-pills { display:flex; gap:6px; margin-top:8px; }
+    .dash-pill { padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; letter-spacing:.2px; }
+    .dash-pill.pending { background:var(--abg); color:var(--amber); }
+    .dash-pill.done { background:var(--gbg); color:var(--green); }
+    .dash-sec-label { font-size:10px; font-weight:700; color:var(--faint); letter-spacing:.8px; text-transform:uppercase; margin:10px 0 4px 2px; }
+    .dcard { background:var(--s1); border:1px solid var(--b1); border-radius:var(--r2); overflow:hidden; transition:border-color .2s,box-shadow .3s,transform .2s; border-left:3px solid var(--b2); animation:cardSlideIn .4s cubic-bezier(.22,.68,0,1) both; }
+    .dcard:hover { border-color:var(--b2); transform:translateY(-1px); }
+    .dcard.done-card { opacity:.55; }
+    .dcard.done-card:hover { opacity:.75; }
+    .dcard.dc-pw { border-left-color:var(--ac); }
+    .dcard.dc-bm { border-left-color:var(--blue); }
+    .dcard.dc-nt { border-left-color:var(--amber); }
+    .dcard.dc-td { border-left-color:var(--green); }
+    .dcard-top { display:flex; align-items:center; gap:10px; padding:12px 10px 12px 14px; cursor:pointer; user-select:none; }
+    .dcheck { width:22px; height:22px; border-radius:50%; border:2px solid var(--ac); display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; transition:all .2s; font-size:12px; color:transparent; }
+    .dcheck:hover { background:rgba(124,106,245,.15); }
+    .dcheck.checked { background:var(--green); border-color:var(--green); color:#fff; }
+    .dcard-mid { flex:1; min-width:0; }
+    .dcard-title { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--tx); }
+    .done-card .dcard-title { text-decoration:line-through; color:var(--muted); }
+    .dcard-sub { font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; font-family:var(--mono); }
+    .dcard-arrows { display:flex; flex-direction:column; gap:2px; flex-shrink:0; align-self:center; }
+    .darr { width:28px; height:24px; display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer; border-radius:7px; transition:background .15s,color .15s,transform .15s; background:var(--s3); border:1px solid var(--b2); padding:0; line-height:0; }
+    .darr:hover { background:var(--acbg); color:var(--ac2); border-color:var(--ac); }
+    .darr:active { transform:scale(.9); }
+    .dcard-expand { font-size:11px; color:var(--faint); padding:0 6px; flex-shrink:0; transition:transform .2s; }
+    .dcard.open .dcard-expand { transform:rotate(180deg); }
+    .dcard-detail { border-top:1px solid var(--b1); background:var(--s2); padding:12px 14px; font-size:12px; color:var(--muted); line-height:1.7; animation:fadeSlideUp .25s ease; }
+    .dcard-detail .dd-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+    .dcard-detail .dd-label { font-size:9px; font-weight:700; color:var(--faint); width:48px; flex-shrink:0; text-transform:uppercase; letter-spacing:.5px; }
+    .dcard-detail .dd-val { font-family:var(--mono); color:var(--tx); word-break:break-all; }
+    .dcard-detail .dd-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+    .dcard-detail .dd-tag { font-size:9px; padding:2px 8px; border-radius:99px; background:var(--s3); color:var(--faint); border:1px solid var(--b1); font-weight:700; }
+    .dcard-detail .dd-note { margin-top:8px; padding-top:8px; border-top:1px solid var(--b1); line-height:1.7; }
+    .dcard-detail .dd-meta { margin-top:8px; padding-top:8px; border-top:1px solid var(--b1); font-size:10px; color:var(--faint); display:flex; gap:14px; }
+    .dash-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:40px 20px; color:var(--muted); animation:fadeSlideUp .5s cubic-bezier(.22,.68,0,1); }
+    .dash-empty-ico { font-size:36px; opacity:.4; }
+    .dash-empty-msg { font-size:13px; text-align:center; max-width:220px; line-height:1.6; }
+
+    /* Dashboard toggle switch in form */
+    .dash-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:10px 0; }
+    .dash-toggle-info { display:flex; align-items:center; gap:8px; }
+    .dash-switch { width:44px; height:24px; border-radius:99px; background:var(--s3); border:1px solid var(--b1); position:relative; cursor:pointer; transition:all .25s; flex-shrink:0; }
+    .dash-switch.on { background:var(--ac); border-color:var(--ac); }
+    .dash-switch-knob { width:18px; height:18px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:transform .25s cubic-bezier(.22,.68,0,1); box-shadow:0 1px 4px rgba(0,0,0,.3); }
+    .dash-switch.on .dash-switch-knob { transform:translateX(20px); }
+    .dd-actions { display:flex; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--b1); }
+    .dd-act { flex:1; padding:8px; border:1px solid var(--b1); border-radius:8px; background:var(--s3); font-size:11px; font-weight:700; cursor:pointer; font-family:var(--sans); transition:all .15s; text-align:center; }
+    .dd-act:hover { background:var(--s1); border-color:var(--b2); }
+    .dd-act:active { transform:scale(.96); }
+</style>
 </head>
 
 <body>
@@ -3039,7 +3101,8 @@
 
   <!-- ─── TABS ───────────────────────────────────────────── -->
   <div id="tabs">
-    <div class="tab on" onclick="switchTab(this,'all')">All</div>
+    <div class="tab on" onclick="switchTab(this,'dash')">Today</div>
+    <div class="tab" onclick="switchTab(this,'all')">All</div>
     <div class="tab" onclick="switchTab(this,'password')">Passwords</div>
     <div class="tab" onclick="switchTab(this,'bookmark')">Links</div>
     <div class="tab" onclick="switchTab(this,'note')">Notes</div>
@@ -3066,6 +3129,9 @@
     <div id="tag-autocomplete"></div>
     <div id="selected-tags"></div>
   </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard"></div>
 
   <!-- ─── ITEM LIST ──────────────────────────────────────── -->
   <div id="list"></div>
@@ -3227,8 +3293,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="config.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 
 </html>

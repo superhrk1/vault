@@ -896,6 +896,7 @@ function genId() {
 }
 
 async function saveItem(item) {
+  item.updated = Date.now();
   const idx = STATE.items.findIndex(i => i.id === item.id);
   if (idx >= 0) STATE.items[idx] = item; else STATE.items.push(item);
   await persistItems();
@@ -912,6 +913,35 @@ async function removeItem(id) {
 // ══════════════════════════════════════════════════════════
 //  RENDER — LIST
 // ══════════════════════════════════════════════════════════
+function timeAgo(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60)    return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60)    return min + "m ago";
+  const hr = Math.floor(min / 60);
+  if (hr < 24)     return hr + "h ago";
+  const day = Math.floor(hr / 24);
+  if (day < 30)    return day + "d ago";
+  const mo = Math.floor(day / 30);
+  if (mo < 12)     return mo + "mo ago";
+  return Math.floor(mo / 12) + "y ago";
+}
+
+function sameDay(a, b) {
+  if (!a || !b) return true;
+  const da = new Date(a), db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+function getItemAge(item) {
+  if (!item.updated || sameDay(item.created, item.updated)) {
+    return timeAgo(item.created);
+  }
+  return "edited " + timeAgo(item.updated);
+}
+
 const T_ICON  = { password:"🔑", bookmark:"🔖", note:"📝", todo:"✅" };
 const T_CLASS = { password:"ip", bookmark:"ib", note:"in", todo:"it" };
 
@@ -1035,11 +1065,13 @@ function cardHTML(item) {
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
+  const ago = getItemAge(item);
+
   return `<div class="card ${ccls}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci ${cls}">${ico}</div>
       <div class="cm">
-        <div class="ct">${esc(item.title||"Untitled")}</div>
+        <div class="ct">${esc(item.title||"Untitled")}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
         <div class="cs">${esc(sub)}</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
@@ -1093,11 +1125,13 @@ function todoCardHTML(item) {
     </div>`;
   }
 
+  const ago = getItemAge(item);
+
   return `<div class="card card-td todo-card${colorClass}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci it">✅</div>
       <div class="cm">
-        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${esc(item.title||"Untitled")}</div>
+        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${esc(item.title||"Untitled")}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
         <div class="cs">${done} of ${total} completed</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>

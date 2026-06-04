@@ -253,7 +253,15 @@ function openApp() {
   $("lock").classList.add("gone");
   renderAll(); updateStats(); renderDrivePanel();
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
-  if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
+  // Check if user just returned from OAuth (fresh connect)
+  if (STATE.drive.token && !STATE.drive.lastSync) {
+    // Just connected — show toast and auto-sync
+    setTimeout(() => {
+      toast("Google Drive connected", "success");
+      renderSyncBadge();
+      triggerSync();
+    }, 400);
+  } else if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
     $("drive-banner").classList.add("show");
     $("db-msg").textContent = configured
       ? "Connect Google Drive to sync your vault across devices"
@@ -371,7 +379,7 @@ async function saveSQFromSetup() {
   LS.set("vault_sq_hash", hash);
   $("sq-setup").style.display = "none";
   openApp();
-  toast("Recovery question saved ✓", "success");
+  toast("Recovery question saved", "success");
 }
 
 function skipSQSetup() {
@@ -476,7 +484,7 @@ async function handlePinReset() {
   // Clear biometric since PIN changed
   LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
   openApp();
-  toast("PIN reset ✓ — Vault data was cleared for security", "warn");
+  toast("PIN reset — Vault data was cleared for security", "warn");
 }
 
 async function sqLockoutUnlock() {
@@ -494,7 +502,7 @@ async function sqLockoutUnlock() {
   clearFailCount();
   endLockout();
   startPinReset();
-  toast("Verified ✓ — Create a new PIN", "success");
+  toast("Verified — Create a new PIN", "success");
 }
 
 function renderSQSettings() {
@@ -559,7 +567,7 @@ async function saveSQChange() {
   LS.set("vault_sq_hash", hash);
   closeOverlay("add-overlay");
   renderSQSettings();
-  toast("Secret question updated ✓", "success");
+  toast("Secret question updated", "success");
 }
 
 // -- Biometric (WebAuthn) --
@@ -613,7 +621,7 @@ async function registerBiometric(pin) {
     LS.set("vault_bio_nonce", btoa(String.fromCharCode(...nonce)));
     LS.set("vault_bio_enc", btoa(String.fromCharCode(...encrypted)));
 
-    toast("Fingerprint unlock enabled ✓", "success");
+    toast("Fingerprint unlock enabled", "success");
   } catch (e) {
     console.warn("Bio registration failed:", e);
     toast("Fingerprint setup failed", "error");
@@ -652,7 +660,7 @@ async function biometricUnlock() {
       STATE.masterKey = pin;
       await loadItems();
       openApp();
-      toast("Unlocked with fingerprint ✓", "success");
+      toast("Unlocked with fingerprint", "success");
     } else {
       // PIN changed since bio was registered
       setLockErr("Fingerprint data outdated — use PIN");
@@ -697,32 +705,9 @@ function connectDrive() {
     scope        : VAULT_CONFIG.DRIVE_SCOPE,
     prompt       : "select_account",
   });
-  // Try popup first; fall back to redirect (mobile)
+  // Redirect in same page — no popup
   const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
-  const popup = window.open(authUrl, "gdrive_auth", "width=520,height=620,left=120,top=80");
-  if (!popup || popup.closed) {
-    // Mobile: redirect instead of popup
-    location.href = authUrl;
-    return;
-  }
-  // Poll for redirect result in popup
-  const poll = setInterval(() => {
-    try {
-      if (!popup || popup.closed) { clearInterval(poll); return; }
-      const h = popup.location.hash;
-      if (h && h.includes("access_token")) {
-        clearInterval(poll);
-        const p = new URLSearchParams(h.slice(1));
-        STATE.drive.token  = p.get("access_token");
-        LS.set("drive_token", STATE.drive.token);
-        popup.close();
-        toast("Google Drive connected ✓", "success");
-        renderDrivePanel();
-        renderSyncBadge();
-        triggerSync();
-      }
-    } catch { /* cross-origin until redirect */ }
-  }, 500);
+  location.href = authUrl;
 }
 
 function disconnectDrive() {
@@ -767,7 +752,7 @@ async function triggerSync() {
     STATE.drive.lastSync = now;
     LS.set("drive_last_sync", now);
     setSyncStatus("synced");
-    toast("Synced to Drive ✓", "success");
+    toast("Synced to Drive", "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
@@ -845,7 +830,7 @@ async function pullFromDrive() {
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
-    toast(`Pulled ${added} new items from Drive ✓`, "success");
+    toast(`Pulled ${added} new items from Drive`, "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
@@ -1229,13 +1214,13 @@ async function copyVal(id, field) {
   const item = STATE.items.find(i => i.id === id);
   if (!item) return;
   await copyText(item[field] || "");
-  toast(`${field==="password"?"Password":"Username"} copied ✓`);
+  toast(`${field==="password"?"Password":"Username"} copied`);
 }
 
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast("Copied ✓", "success");
+    toast("Copied", "success");
     // Auto-clear clipboard after 30s for security
     if (_clipboardClearTimer) clearTimeout(_clipboardClearTimer);
     _clipboardClearTimer = setTimeout(async () => {
@@ -1461,13 +1446,13 @@ function genInlinePw() {
     el.type = "text";
     updateStrength();
   }
-  toast("Password generated ✓", "success");
+  toast("Password generated", "success");
 }
 
 function copyInlinePw() {
   const pw = $("f-password")?.value || "";
   if (!pw) { toast("No password to copy", "warn"); return; }
-  navigator.clipboard.writeText(pw).then(() => toast("Password copied ✓", "success"));
+  navigator.clipboard.writeText(pw).then(() => toast("Password copied", "success"));
 }
 
 function addTag() {
@@ -1522,7 +1507,7 @@ async function submitItem() {
   await saveItem(item);
   closeOverlay("add-overlay");
   renderAll(); updateStats();
-  toast(STATE.editId ? "Item updated ✓" : "Item added ✓", "success");
+  toast(STATE.editId ? "Item updated" : "Item added", "success");
 }
 
 function selectColor(name) {
@@ -1580,7 +1565,7 @@ async function exportJSON() {
   const payload   = JSON.stringify({ version:2, app:"vault-pwa", exported:new Date().toISOString(), vault:encrypted });
   const dateStr   = new Date().toISOString().slice(0,10);
   dl(`vault-backup-${dateStr}.enc.json`, payload, "application/json");
-  toast("Vault exported ✓", "success");
+  toast("Vault exported", "success");
 }
 
 function exportCSV() {
@@ -1617,7 +1602,7 @@ async function doImport(e) {
     await persistItems();
     if (STATE.drive.token) triggerSync();
     renderAll(); updateStats();
-    toast(`Imported ${added} items ✓`, "success");
+    toast(`Imported ${added} items`, "success");
   } catch (err) { toast("Import failed: " + err.message, "error"); }
 }
 
@@ -1657,7 +1642,7 @@ async function changeMasterPw() {
   LS.set("vault_hash", await Crypto.hashPassword(nw));
   $("new-pw").value = "";
   if (STATE.drive.token) triggerSync();
-  toast("Master password updated ✓", "success");
+  toast("Master password updated", "success");
 }
 
 function clearAll() {
@@ -1945,7 +1930,7 @@ window.addEventListener("beforeinstallprompt", (e) => {
 window.addEventListener("appinstalled", () => {
   _deferredInstallPrompt = null;
   markAsInstalled();
-  toast("Vault installed ✓", "success");
+  toast("Vault installed", "success");
 });
 
 function showInstallSection() {

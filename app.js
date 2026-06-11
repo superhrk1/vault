@@ -61,7 +61,7 @@ let STATE = {
 async function persistItems() {
   if (!STATE.masterKey) return;
   if (!STATE.items.length) { LS.del("vault_data"); return; }
-  const blob = await Crypto.encrypt(STATE.items, STATE.masterKey);
+  const blob = await Crypto.encryptData(STATE.items);
   LS.set("vault_data", blob);
 }
 
@@ -69,10 +69,17 @@ async function loadItems() {
   const blob = LS.get("vault_data");
   if (!blob) { STATE.items = []; return; }
   try {
-    STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
+    STATE.items = await Crypto.decryptData(blob);
     validateItems();
   } catch {
-    STATE.items = [];
+    try {
+      STATE.items = await Crypto.decryptLegacy(blob, STATE.masterKey);
+      validateItems();
+      const newBlob = await Crypto.encryptData(STATE.items);
+      LS.set("vault_data", newBlob);
+    } catch(e) {
+      STATE.items = [];
+    }
   }
 }
 
@@ -183,7 +190,6 @@ function renderPinDots() {
 
 async function handlePinSubmit() {
   if (_pin.length < 4) return;
-  // PIN reset mode (after SQ verification)
   if (_pinResetMode) { await handlePinReset(); return; }
   setLockErr("");
   const hasVault = !!LS.get("vault_hash");
@@ -203,15 +209,25 @@ async function handlePinSubmit() {
     }
     await setupVault(_pin); return;
   }
-  const hash = await Crypto.hashPassword(_pin);
-  if (hash !== LS.get("vault_hash")) {
-    recordFailedAttempt();
-    const remaining = 3 - getFailCount();
-    if (remaining <= 0) { startLockout(); }
-    else { setLockErr("Wrong PIN — " + remaining + " attempt" + (remaining===1?"":"s") + " left"); shakeDots(); }
-    _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
+  
+  const ok = await Crypto.unlockLocalPin(_pin);
+  if (!ok) {
+    const legacyHash = await Crypto.hashPassword(_pin);
+    if (legacyHash !== LS.get("vault_hash")) {
+      recordFailedAttempt();
+      const remaining = 3 - getFailCount();
+      if (remaining <= 0) { startLockout(); }
+      else { setLockErr("Wrong PIN - " + remaining + " attempt" + (remaining===1?"":"s") + " left"); shakeDots(); }
+      _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
+    } else {
+      STATE.masterKey = _pin;
+      const masterKey = await Crypto.generateMasterKey();
+      await Crypto.setupLocalPin(_pin, masterKey);
+      Crypto.masterKeyObj = masterKey;
+    }
+  } else {
+    clearFailCount(); STATE.masterKey = _pin;
   }
-  clearFailCount(); STATE.masterKey = _pin;
   sessionStorage.setItem("vault_session_key", _pin);
   _pin = "";
   await loadItems(); openApp();
@@ -776,12 +792,15 @@ async function triggerSync() {
 }
 
 async function uploadVault() {
-  const encrypted = await Crypto.encrypt(STATE.items, STATE.masterKey);
+  const encrypted = await Crypto.encryptData(STATE.items);
   const payload   = JSON.stringify({
-    version  : 2,
+    version  : 4,
     app      : "vault-pwa",
     exported : new Date().toISOString(),
     vault    : encrypted,
+    cloud_hash: LS.get("vault_cloud_hash") || "",
+    cloud_salt: LS.get("vault_cloud_salt") || "",
+    cloud_wrapped: LS.get("vault_cloud_wrapped") || ""
   });
 
   // Find or create file
@@ -861,7 +880,27 @@ async function pullFromDrive() {
     }
 
     if (!payload.vault) throw new Error("Invalid backup");
-    const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    
+    let imported;
+    if (payload.version === 4) {
+      if (!Crypto.masterKeyObj) {
+         const pw = prompt("Enter your Cloud Master Password to decrypt your Vault:");
+         if (!pw) throw new Error("Cancelled");
+         const ok = await Crypto.unlockCloudPassword(pw, payload.cloud_salt, payload.cloud_wrapped);
+         if (!ok) { alert("Wrong Cloud Master Password"); throw new Error("Wrong Cloud Password"); }
+         
+         const localPin = prompt("Setup a new 4-digit PIN for quick unlock on this device:");
+         if (localPin && localPin.length >= 4) {
+           await Crypto.setupLocalPin(localPin, Crypto.masterKeyObj);
+           STATE.masterKey = localPin;
+         } else {
+           alert("Invalid PIN. Vault will be locked when refreshed.");
+         }
+      }
+      imported = await Crypto.decryptData(payload.vault);
+    } else {
+      imported = await Crypto.decryptLegacy(payload.vault, STATE.masterKey);
+    }
     let added = 0;
     let updated = 0;
     for (const item of imported) {
@@ -1707,8 +1746,8 @@ function askDelete(id) {
 //  IMPORT / EXPORT
 // ══════════════════════════════════════════════════════════
 async function exportJSON() {
-  const encrypted = await Crypto.encrypt(STATE.items, STATE.masterKey);
-  const payload   = JSON.stringify({ version:2, app:"vault-pwa", exported:new Date().toISOString(), vault:encrypted });
+  const encrypted = await Crypto.encryptData(STATE.items);
+  const payload   = JSON.stringify({ version:4, app:"vault-pwa", exported:new Date().toISOString(), vault:encrypted });
   const dateStr   = new Date().toISOString().slice(0,10);
   dl(`vault-backup-${dateStr}.enc.json`, payload, "application/json");
   toast("Vault exported", "success");
@@ -1740,7 +1779,9 @@ async function doImport(e) {
     const text    = await file.text();
     const payload = JSON.parse(text);
     if (!payload.vault) throw new Error("Invalid format");
-    const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    let imported;
+      if (payload.version === 4) imported = await Crypto.decryptData(payload.vault);
+      else imported = await Crypto.decryptLegacy(payload.vault, STATE.masterKey);
     let added = 0;
     for (const item of imported) {
       if (!STATE.items.find(i => i.id === item.id)) { STATE.items.push(item); added++; }

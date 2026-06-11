@@ -25,45 +25,7 @@ const LS = {
 };
 
 // ══════════════════════════════════════════════════════════
-//  CRYPTO  (AES-256-GCM + PBKDF2)
-// ══════════════════════════════════════════════════════════
-const Crypto = {
-  async deriveKey(password, salt) {
-    const ITERS = VAULT_CONFIG.PBKDF2_ITERATIONS || 310000;
-    const mat = await crypto.subtle.importKey("raw", enc(password), "PBKDF2", false, ["deriveKey"]);
-    return crypto.subtle.deriveKey(
-      { name:"PBKDF2", salt, iterations:ITERS, hash:"SHA-256" },
-      mat, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
-    );
-  },
-
-  async encrypt(data, password) {
-    const salt = rnd(16), iv = rnd(12);
-    const key  = await Crypto.deriveKey(password, salt);
-    const ct   = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, enc(JSON.stringify(data)));
-    const buf  = new Uint8Array(16 + 12 + ct.byteLength);
-    buf.set(salt, 0); buf.set(iv, 16); buf.set(new Uint8Array(ct), 28);
-    return b64e(buf);
-  },
-
-  async decrypt(b64, password) {
-    const buf  = b64d(b64);
-    const salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
-    const key  = await Crypto.deriveKey(password, salt);
-    const pt   = await crypto.subtle.decrypt({ name:"AES-GCM", iv }, key, ct);
-    return JSON.parse(dec(pt));
-  },
-
-  async hashPassword(password) {
-    const buf = await crypto.subtle.digest("SHA-256", enc(password + "__vault_kdf_2024__"));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
-  },
-
-  async verifyPassword(password, hash) {
-    const h = await this.hashPassword(password);
-    return h === hash;
-  },
-};
+import { VaultCryptoManager as Crypto } from './src/crypto.js';
 
 // ══════════════════════════════════════════════════════════
 //  STATE
@@ -257,8 +219,9 @@ async function handlePinSubmit() {
 
 async function setupVault(pw) {
   if (pw.length < 4) { setLockErr("Min 4 digits"); return; }
-  const hash = await Crypto.hashPassword(pw);
-  LS.set("vault_hash", hash);
+  const masterKey = await Crypto.generateMasterKey();
+  await Crypto.setupLocalPin(pw, masterKey);
+  Crypto.masterKeyObj = masterKey;
   STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
   // Show secret question setup
   $("pin-entry").style.display = "none";
@@ -2341,3 +2304,163 @@ function checkInstalledState() {
 // ══════════════════════════════════════════════════════════
 boot();
 checkInstalledState();
+
+// --- AUTO EXPORTS ---
+window.persistItems = persistItems;
+window.loadItems = loadItems;
+window.validateItems = validateItems;
+window.boot = boot;
+window.numpadPress = numpadPress;
+window.numpadBack = numpadBack;
+window.renderPinDots = renderPinDots;
+window.handlePinSubmit = handlePinSubmit;
+window.setupVault = setupVault;
+window.openApp = openApp;
+window.lockVault = lockVault;
+window.setLockErr = setLockErr;
+window.shakeDots = shakeDots;
+window.getFailCount = getFailCount;
+window.recordFailedAttempt = recordFailedAttempt;
+window.clearFailCount = clearFailCount;
+window.startLockout = startLockout;
+window.checkLockout = checkLockout;
+window.applyLockout = applyLockout;
+window.endLockout = endLockout;
+window.hashSQAnswer = hashSQAnswer;
+window.onSQPresetChange = onSQPresetChange;
+window.saveSQFromSetup = saveSQFromSetup;
+window.skipSQSetup = skipSQSetup;
+window.showForgotPIN = showForgotPIN;
+window.backToPin = backToPin;
+window.verifySQAnswer = verifySQAnswer;
+window.startPinReset = startPinReset;
+window.handlePinReset = handlePinReset;
+window.sqLockoutUnlock = sqLockoutUnlock;
+window.renderSQSettings = renderSQSettings;
+window.openChangeSQ = openChangeSQ;
+window.saveSQChange = saveSQChange;
+window.isBioAvailable = isBioAvailable;
+window.offerBioRegistration = offerBioRegistration;
+window.registerBiometric = registerBiometric;
+window.biometricUnlock = biometricUnlock;
+window.handleOAuthCallback = handleOAuthCallback;
+window.connectDrive = connectDrive;
+window.disconnectDrive = disconnectDrive;
+window.driveReq = driveReq;
+window.triggerSync = triggerSync;
+window.uploadVault = uploadVault;
+window.pullFromDrive = pullFromDrive;
+window.setSyncStatus = setSyncStatus;
+window.renderSyncBadge = renderSyncBadge;
+window.renderDrivePanel = renderDrivePanel;
+window.driveRow = driveRow;
+window.genId = genId;
+window.saveItem = saveItem;
+window.removeItem = removeItem;
+window.timeAgo = timeAgo;
+window.sameDay = sameDay;
+window.getItemAge = getItemAge;
+window.getAllTags = getAllTags;
+window.toggleFavFilter = toggleFavFilter;
+window.switchTab = switchTab;
+window.onSearch = onSearch;
+window.debouncedRenderList = debouncedRenderList;
+window.clearSearch = clearSearch;
+window.getItemUrgency = getItemUrgency;
+window.filtered = filtered;
+window.renderList = renderList;
+window.renderAll = renderAll;
+window.cardHTML = cardHTML;
+window.todoCardHTML = todoCardHTML;
+window.toggleTodoDone = toggleTodoDone;
+window.getFlagBadge = getFlagBadge;
+window.detailHTML = detailHTML;
+window.dRow = dRow;
+window.actionsHTML = actionsHTML;
+window.cab = cab;
+window.toggleCard = toggleCard;
+window.togglePwVis = togglePwVis;
+window.copyVal = copyVal;
+window.copyText = copyText;
+window.openLink = openLink;
+window.toggleFav = toggleFav;
+window.openAdd = openAdd;
+window.openEdit = openEdit;
+window.buildForm = buildForm;
+window.selectPri = selectPri;
+window.toggleDashSwitch = toggleDashSwitch;
+window.switchType = switchType;
+window.tpw = tpw;
+window.updateStrength = updateStrength;
+window.updateStrBar = updateStrBar;
+window.toggleGenPill = toggleGenPill;
+window.genInlinePw = genInlinePw;
+window.copyInlinePw = copyInlinePw;
+window.addTag = addTag;
+window.removeTag = removeTag;
+window.renderChips = renderChips;
+window.refreshChips = refreshChips;
+window.fv = fv;
+window.submitItem = submitItem;
+window.selectColor = selectColor;
+window.addSubitem = addSubitem;
+window.removeSubitem = removeSubitem;
+window.refreshSubitems = refreshSubitems;
+window.askDelete = askDelete;
+window.exportJSON = exportJSON;
+window.exportCSV = exportCSV;
+window.dl = dl;
+window.pickImport = pickImport;
+window.doImport = doImport;
+window.updateStats = updateStats;
+window.changeMasterPw = changeMasterPw;
+window.clearAll = clearAll;
+window.setSort = setSort;
+window.startAutoLock = startAutoLock;
+window.stopAutoLock = stopAutoLock;
+window.resetAutoLock = resetAutoLock;
+window.updateAutoLockBar = updateAutoLockBar;
+window.setAutoLock = setAutoLock;
+window.initAutoLockUI = initAutoLockUI;
+window.updateFabPulse = updateFabPulse;
+window.todayKey = todayKey;
+window.getDashState = getDashState;
+window.saveDashState = saveDashState;
+window.getDashItems = getDashItems;
+window.renderDashboard = renderDashboard;
+window.dashCardHTML = dashCardHTML;
+window.dashDetailHTML = dashDetailHTML;
+window.dashToggleDone = dashToggleDone;
+window.dashMoveUp = dashMoveUp;
+window.dashMoveDown = dashMoveDown;
+window.dashToggleExpand = dashToggleExpand;
+window.animateCounter = animateCounter;
+window.showPage = showPage;
+window.dismissBanner = dismissBanner;
+window.openOverlay = openOverlay;
+window.closeOverlay = closeOverlay;
+window.toast = toast;
+window.onTagSearch = onTagSearch;
+window.renderTagAutocomplete = renderTagAutocomplete;
+window.selectAutoTag = selectAutoTag;
+window.removeActiveTag = removeActiveTag;
+window.clearAllTags = clearAllTags;
+window.renderSelectedTags = renderSelectedTags;
+window.clearTagSearch = clearTagSearch;
+window.showInstallSection = showInstallSection;
+window.markAsInstalled = markAsInstalled;
+window.installPWA = installPWA;
+window.checkInstalledState = checkInstalledState;
+async function showCloudPasswordSetup() {
+  const pw = prompt("SECURITY UPGRADE:\n\nTo securely sync to Google Drive, you must create a Strong Cloud Master Password. This protects your data if someone gains access to your Google account.\n\nEnter your new Cloud Master Password:");
+  if (!pw) return;
+  const pw2 = prompt("Confirm Cloud Master Password:");
+  if (pw !== pw2) {
+    alert("Passwords do not match.");
+    return;
+  }
+  await Crypto.setupCloudPassword(pw, Crypto.masterKeyObj);
+  alert("Cloud Master Password saved! Your vault will now be securely synced to Google Drive.");
+  googleAuth();
+}
+window.showCloudPasswordSetup = showCloudPasswordSetup;

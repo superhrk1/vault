@@ -147,19 +147,21 @@ Once Client ID is configured:
 1. Open the app → tap **⚙️ Settings**
 2. Under **Google Drive Sync** → tap **Connect**
 3. A Google sign-in popup appears → select your account → allow access
-4. You'll see "Drive ✓" badge in the status bar
-5. From now on, every time you add/edit/delete an item, it auto-syncs to Drive
+4. **Cloud Password Setup**: You will be prompted to create a **Strong Cloud Master Password**. This password will encrypt your backups. Your local 4-digit PIN is NOT used for Drive backups to prevent brute-force attacks on your cloud data.
+5. You'll see "Drive ✓" badge in the status bar
+6. From now on, every time you add/edit/delete an item, it auto-syncs to Drive
 
-**Your vault file on Drive:** `vault-encrypted-backup.json`
-- It is always encrypted with your master password before upload
-- Google cannot read your passwords even if they access the file
-- Only someone with BOTH the file AND your master password can decrypt it
+**Your vault file on Drive:**
+- It is stored in the hidden **Application Data** folder (`spaces=appDataFolder`). This means it will not clutter your Google Drive UI and you cannot accidentally delete it.
+- It is always encrypted with the randomly generated Data Encryption Key (DEK), which is wrapped by your **Cloud Master Password**.
+- Google cannot read your passwords even if they access the file.
 
 **Pulling to another device:**
 1. Install the app on a second device / browser
-2. Enter your master password
-3. Settings → Connect Drive → same Google account
-4. Tap **Pull** to download your cloud backup
+2. Settings → Connect Drive → same Google account
+3. Tap **Pull** to download your cloud backup
+4. You will be prompted for your **Cloud Master Password** to decrypt the backup.
+5. You will then be prompted to set up a new **4-digit PIN** for fast local unlocks on this specific device.
 
 ---
 
@@ -192,9 +194,9 @@ Once Client ID is configured:
 | What              | How                                          |
 |-------------------|----------------------------------------------|
 | Encryption        | AES-256-GCM (industry standard)              |
-| Key derivation    | PBKDF2-SHA256, 310,000 iterations            |
-| Master password   | Never stored — only SHA-256 hash for verify  |
+| Key derivation    | PBKDF2-SHA256, 310,000 iterations (Cached)   |
+| Passwords         | Dual System: 4-digit PIN (local) + Strong Cloud Password (Sync) |
 | Local storage     | Encrypted blob only — no plain text ever     |
-| Drive storage     | Same encrypted blob — Google sees ciphertext |
-| Drive permissions | `drive.file` only — can't see other files    |
+| Drive storage     | Encrypted blob in hidden `appDataFolder`     |
+| Drive permissions | `drive.appdata` only — can't see other files |
 | Clipboard         | Copy without displaying the value on screen  |

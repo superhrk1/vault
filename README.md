@@ -6,13 +6,14 @@ synced to your own Google Drive.
 
 ## Features
 - 🔑 Passwords · 💳 Subscriptions · 🔖 Bookmarks · 📝 Notes
-- AES-256-GCM encryption + PBKDF2 (310k iterations) — zero plain text stored
-- Google Drive sync — your encrypted file, your account
+- **Dual-Password Security**: Fast 4-digit PIN for local unlock, Strong Cloud Master Password for Google Drive backups
+- AES-256-GCM encryption with high-performance Key Encryption Key (KEK) caching
+- Google Drive sync — utilizes the hidden `appDataFolder` to prevent accidental deletion
 - Copy username/password to clipboard without showing the value
 - Multi-tag system for grouping, filtering and sorting
 - Password strength meter + built-in password generator
 - Import / Export (encrypted JSON + CSV)
-- Fully offline — service worker caches the app
+- Fully offline — Service Worker caches the modular ES app
 - Installs to Android home screen via Chrome
 
 ## Setup

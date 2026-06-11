@@ -58,6 +58,11 @@ const Crypto = {
     const buf = await crypto.subtle.digest("SHA-256", enc(password + "__vault_kdf_2024__"));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
   },
+
+  async verifyPassword(password, hash) {
+    const h = await this.hashPassword(password);
+    return h === hash;
+  },
 };
 
 // ══════════════════════════════════════════════════════════
@@ -758,6 +763,9 @@ async function driveReq(url, opts = {}) {
     renderDrivePanel();
     throw new Error("SESSION_EXPIRED");
   }
+  if (!res.ok) {
+    throw new Error(`HTTP_ERROR_${res.status}`);
+  }
   return res;
 }
 
@@ -802,24 +810,36 @@ async function uploadVault() {
 
   if (STATE.drive.fileId) {
     // Update
-    await driveReq(
-      `https://www.googleapis.com/upload/drive/v3/files/${STATE.drive.fileId}?uploadType=media`,
-      { method:"PATCH", headers:{"Content-Type":"application/json"}, body:payload }
-    );
-  } else {
-    // Create
-    const meta = { name:VAULT_CONFIG.DRIVE_FILE_NAME, mimeType:"application/json" };
-    const form = new FormData();
-    form.append("metadata", new Blob([JSON.stringify(meta)], { type:"application/json" }));
-    form.append("file",     new Blob([payload],              { type:"application/json" }));
-    const res = await driveReq(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-      { method:"POST", body:form }
-    );
-    const dat = await res.json();
-    STATE.drive.fileId = dat.id;
-    LS.set("drive_file_id", STATE.drive.fileId);
+    try {
+      await driveReq(
+        `https://www.googleapis.com/upload/drive/v3/files/${STATE.drive.fileId}?uploadType=media`,
+        { method:"PATCH", headers:{"Content-Type":"application/json"}, body:payload }
+      );
+      return;
+    } catch (e) {
+      if (e.message.includes("404")) {
+        STATE.drive.fileId = null;
+        LS.del("drive_file_id");
+      } else {
+        throw e;
+      }
+    }
   }
+
+  // Create
+  const res = await driveReq("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: VAULT_CONFIG.DRIVE_FILE_NAME })
+  });
+  const dat = await res.json();
+  STATE.drive.fileId = dat.id;
+  LS.set("drive_file_id", STATE.drive.fileId);
+
+  await driveReq(
+    `https://www.googleapis.com/upload/drive/v3/files/${STATE.drive.fileId}?uploadType=media`,
+    { method:"PATCH", headers:{"Content-Type":"application/json"}, body:payload }
+  );
 }
 
 async function pullFromDrive() {
@@ -836,8 +856,19 @@ async function pullFromDrive() {
       STATE.drive.fileId = fileId;
       LS.set("drive_file_id", fileId);
     }
-    const res     = await driveReq(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
-    const payload = await res.json();
+    let payload;
+    try {
+      const res = await driveReq(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+      payload = await res.json();
+    } catch (e) {
+      if (e.message.includes("404")) {
+        STATE.drive.fileId = null;
+        LS.del("drive_file_id");
+        throw new Error("Backup file not found on Drive");
+      }
+      throw e;
+    }
+
     if (!payload.vault) throw new Error("Invalid backup");
     const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
     let added = 0;

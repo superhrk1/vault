@@ -765,8 +765,8 @@ async function driveReq(url, opts = {}) {
       ...(opts.headers || {}),
     },
   });
-  if (res.status === 401) {
-    // Token expired
+  if (res.status === 401 || res.status === 403) {
+    // Token expired or insufficient scope
     STATE.drive.token = null;
     LS.del("drive_token");
     STATE.drive.status = "error";
@@ -810,8 +810,8 @@ async function uploadVault() {
 
   // Find or create file
   if (!STATE.drive.fileId) {
-    const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}' and trashed=false`);
-    const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+    const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}'`);
+    const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id)`);
     const dat = await res.json();
     if (dat.files?.length) {
       STATE.drive.fileId = dat.files[0].id;
@@ -841,7 +841,7 @@ async function uploadVault() {
   const res = await driveReq("https://www.googleapis.com/drive/v3/files", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: VAULT_CONFIG.DRIVE_FILE_NAME })
+    body: JSON.stringify({ name: VAULT_CONFIG.DRIVE_FILE_NAME, parents: ["appDataFolder"] })
   });
   const dat = await res.json();
   STATE.drive.fileId = dat.id;
@@ -859,8 +859,8 @@ async function pullFromDrive() {
   try {
     let fileId = STATE.drive.fileId;
     if (!fileId) {
-      const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}' and trashed=false`);
-      const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+      const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}'`);
+      const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id)`);
       const dat = await res.json();
       if (!dat.files?.length) { toast("No backup found on Drive"); setSyncStatus("synced"); return; }
       fileId = dat.files[0].id;

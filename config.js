@@ -13,7 +13,7 @@ const VAULT_CONFIG = {
 
   // ── Advanced settings (leave as-is unless you know what you're doing) ──
   DRIVE_FILE_NAME: "vault-encrypted-backup.json",   // filename stored in your Drive
-  DRIVE_SCOPE: "https://www.googleapis.com/auth/drive.file",
+  DRIVE_SCOPE: "https://www.googleapis.com/auth/drive.appdata",
   PBKDF2_ITERATIONS: 310000,                          // key derivation strength
   APP_NAME: "Vault",
 };

@@ -295,11 +295,20 @@ function openApp() {
 
   if (!window._visibilitySyncListener) {
     window._visibilitySyncListener = () => {
-      if (document.visibilityState === "visible" && STATE.drive.token && STATE.masterKey) {
+      if (document.visibilityState === "visible" && STATE.drive.token && STATE.masterKey && navigator.onLine) {
         pullFromDrive();
       }
     };
     document.addEventListener("visibilitychange", window._visibilitySyncListener);
+  }
+
+  if (!window._onlineSyncListener) {
+    window._onlineSyncListener = () => {
+      if (STATE.drive.token && STATE.masterKey) {
+        pullFromDrive().then(() => triggerSync());
+      }
+    };
+    window.addEventListener("online", window._onlineSyncListener);
   }
   // Offer biometric registration if not already set up
   offerBioRegistration();
@@ -781,6 +790,10 @@ async function driveReq(url, opts = {}) {
 }
 
 async function triggerSync() {
+  if (!navigator.onLine) {
+    setSyncStatus("offline");
+    return;
+  }
   if (!STATE.drive.token) { toast("Connect Drive first"); return; }
   if (!STATE.masterKey) return;
   setSyncStatus("syncing");
@@ -854,6 +867,10 @@ async function uploadVault() {
 }
 
 async function pullFromDrive() {
+  if (!navigator.onLine) {
+    setSyncStatus("offline");
+    return;
+  }
   if (!STATE.drive.token) { toast("Connect Drive first"); return; }
   setSyncStatus("syncing");
   try {
@@ -902,11 +919,16 @@ async function pullFromDrive() {
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
-    if (added > 0 || updated > 0) toast(`Pulled ${added} new, ${updated} updated items`, "success");
+    if (added > 0 || updated > 0) {
+      toast(`Pulled ${added} new, ${updated} updated items`, "success");
+    } else {
+      toast("Vault is up to date", "info");
+    }
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
     if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
+    else if (e.message === "Failed to fetch") toast("Offline — using local vault", "info");
     else toast("Pull failed: " + e.message, "error");
   }
 }

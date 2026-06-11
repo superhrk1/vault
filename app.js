@@ -284,11 +284,22 @@ function openApp() {
       renderSyncBadge();
       triggerSync();
     }, 400);
+  } else if (STATE.drive.token) {
+    setTimeout(() => pullFromDrive(), 400);
   } else if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
     $("drive-banner").classList.add("show");
     $("db-msg").textContent = configured
       ? "Connect Google Drive to sync your vault across devices"
       : "⚙️ Add your Google Client ID in config.js to enable Drive sync";
+  }
+
+  if (!window._visibilitySyncListener) {
+    window._visibilitySyncListener = () => {
+      if (document.visibilityState === "visible" && STATE.drive.token && STATE.masterKey) {
+        pullFromDrive();
+      }
+    };
+    document.addEventListener("visibilitychange", window._visibilitySyncListener);
   }
   // Offer biometric registration if not already set up
   offerBioRegistration();
@@ -872,15 +883,26 @@ async function pullFromDrive() {
     if (!payload.vault) throw new Error("Invalid backup");
     const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
     let added = 0;
+    let updated = 0;
     for (const item of imported) {
-      if (!STATE.items.find(i => i.id === item.id)) { STATE.items.push(item); added++; }
+      const existingIdx = STATE.items.findIndex(i => i.id === item.id);
+      if (existingIdx === -1) { 
+        STATE.items.push(item); 
+        added++; 
+      } else {
+        const existing = STATE.items[existingIdx];
+        if ((item.updated || 0) > (existing.updated || 0)) {
+          STATE.items[existingIdx] = item;
+          updated++;
+        }
+      }
     }
     await persistItems();
     renderAll(); updateStats();
     setSyncStatus("synced");
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
-    toast(`Pulled ${added} new items from Drive`, "success");
+    if (added > 0 || updated > 0) toast(`Pulled ${added} new, ${updated} updated items`, "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
@@ -954,7 +976,13 @@ async function saveItem(item) {
 }
 
 async function removeItem(id) {
-  STATE.items = STATE.items.filter(i => i.id !== id);
+  const item = STATE.items.find(i => i.id === id);
+  if (item) {
+    item.deleted = true;
+    item.updated = Date.now();
+  } else {
+    STATE.items.push({ id, deleted: true, updated: Date.now() });
+  }
   await persistItems();
   if (STATE.drive.token) triggerSync();
   renderAll(); renderTagStrip(); updateStats();
@@ -1008,7 +1036,9 @@ const TODO_COLORS = [
 
 function getAllTags() {
   const s = new Set();
-  STATE.items.forEach(i => (i.tags||[]).forEach(t => s.add(t)));
+  STATE.items.forEach(i => {
+    if (!i.deleted) (i.tags||[]).forEach(t => s.add(t));
+  });
   return [...s].sort();
 }
 
@@ -1082,6 +1112,7 @@ function getItemUrgency(item) {
 function filtered() {
   const q = ($("q")?.value || "").toLowerCase();
   let r = STATE.items.filter(i => {
+    if (i.deleted) return false;
     if (STATE.tab !== "all" && STATE.tab !== "dash" && i.type !== STATE.tab) return false;
     if (STATE.favOnly && !i.fav) return false;
     if (STATE.activeTags.length > 0 && !STATE.activeTags.some(t => (i.tags||[]).includes(t))) return false;
@@ -1743,10 +1774,11 @@ function updateStats() {
   const grid = $("stat-grid");
   if (!grid) return;
   const c = { password:0, todo:0, bookmark:0, note:0 };
-  STATE.items.forEach(i => { if (c[i.type] !== undefined) c[i.type]++; });
-  const favCount = STATE.items.filter(i => i.fav).length;
+  const activeItems = STATE.items.filter(i => !i.deleted);
+  activeItems.forEach(i => { if (c[i.type] !== undefined) c[i.type]++; });
+  const favCount = activeItems.filter(i => i.fav).length;
   const data = [
-    [STATE.items.length, "Total Items", "🗄️"],
+    [activeItems.length, "Total Items", "🗄️"],
     [favCount,           "Favorites",   "★"],
     [c.password,         "Passwords",   "🔑"],
     [c.todo,             "Todos",       "✅"],
@@ -1906,7 +1938,7 @@ function getDashState() { return LS.get(todayKey()) || { completed: [], order: [
 function saveDashState(s) { LS.set(todayKey(), s); }
 
 function getDashItems() {
-  return STATE.items.filter(item => item.dashboard === true);
+  return STATE.items.filter(item => !item.deleted && item.dashboard === true);
 }
 
 function renderDashboard() {

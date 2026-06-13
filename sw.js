@@ -1,5 +1,5 @@
-const CACHE = "vault-pwa-v31";
-const SHELL = ["./", "./index.html", "./config.js?v=31", "./app.js?v=31", "./manifest.json"];
+const CACHE = "vault-pwa-v32";
+const SHELL = ["./", "./index.html", "./config.js?v=32", "./app.js?v=32", "./manifest.json"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
@@ -25,7 +25,8 @@ self.addEventListener("fetch", e => {
       if (cached) return cached;
       return fetch(e.request).then(resp => {
         if (resp && resp.status === 200 && resp.type === "basic") {
-          caches.open(CACHE).then(c => c.put(e.request, resp.clone()));
+          const cloned = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, cloned));
         }
         return resp;
       });

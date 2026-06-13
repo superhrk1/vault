@@ -1768,25 +1768,142 @@ function dl(name, content, mime) {
   a.download = name; a.click();
 }
 
+function parseCSV(text) {
+  const lines = [];
+  let row = [""];
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i+1];
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        row[row.length - 1] += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      row.push("");
+    } else if ((c === '\r' || c === '\n') && !inQuotes) {
+      if (c === '\r' && next === '\n') i++;
+      lines.push(row);
+      row = [""];
+    } else {
+      row[row.length - 1] += c;
+    }
+  }
+  if (row.length > 1 || row[0] !== "") {
+    lines.push(row);
+  }
+  return lines;
+}
+
+function csvToItems(csvText) {
+  const rows = parseCSV(csvText);
+  if (rows.length < 2) return [];
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const items = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length < header.length) continue;
+    const item = {
+      id: genId(),
+      type: "password",
+      fav: false,
+      created: Date.now(),
+      tags: [],
+    };
+    header.forEach((colName, idx) => {
+      const val = row[idx] ? row[idx].trim() : "";
+      if (colName === "id" && val) item.id = val;
+      else if (colName === "type" && val) item.type = val;
+      else if (colName === "tags") {
+        item.tags = val ? val.split(";").map(t => t.trim()).filter(Boolean) : [];
+      } else if (colName === "fav") {
+        item.fav = val === "true" || val === "1";
+      } else if (colName === "created") {
+        item.created = parseInt(val) || Date.now();
+      } else if (colName === "priority") {
+        item.priority = val || "normal";
+      } else if (colName === "dashboard") {
+        item.dashboard = val === "true" || val === "1";
+      } else if (colName === "color") {
+        item.color = val;
+      } else {
+        item[colName] = val;
+      }
+    });
+    items.push(item);
+  }
+  return items;
+}
+
 function pickImport() { $("imp-file").click(); }
 
 async function doImport(e) {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    const text    = await file.text();
-    const payload = JSON.parse(text);
-    if (!payload.vault) throw new Error("Invalid format");
-    const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    const text = await file.text();
+    let imported = [];
+    
+    if (file.name.endsWith(".csv")) {
+      imported = csvToItems(text);
+    } else {
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (jsonErr) {
+        // Fallback: try parsing as CSV in case CSV had incorrect extension/mime or formatting
+        try {
+          imported = csvToItems(text);
+          if (imported.length === 0) throw jsonErr;
+        } catch {
+          throw jsonErr;
+        }
+      }
+      
+      if (imported.length === 0 && payload) {
+        if (payload.vault) {
+          if (typeof payload.vault === "string") {
+            // Encrypted JSON backup
+            imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+          } else if (Array.isArray(payload.vault)) {
+            // Unencrypted JSON backup under "vault"
+            imported = payload.vault;
+          }
+        } else if (Array.isArray(payload)) {
+          // Direct array of items
+          imported = payload;
+        } else if (payload.items && Array.isArray(payload.items)) {
+          // Object containing items array
+          imported = payload.items;
+        } else {
+          throw new Error("Invalid JSON structure");
+        }
+      }
+    }
+
+    if (!Array.isArray(imported)) {
+      throw new Error("Parsed data is not an array of items");
+    }
+
     let added = 0;
     for (const item of imported) {
-      if (!STATE.items.find(i => i.id === item.id)) { STATE.items.push(item); added++; }
+      if (!item.id) item.id = genId();
+      if (!item.type) item.type = "password";
+      if (!STATE.items.find(i => i.id === item.id)) {
+        STATE.items.push(item);
+        added++;
+      }
     }
     await persistItems();
     if (STATE.drive.token) triggerSync();
     renderAll(); updateStats();
     toast(`Imported ${added} items`, "success");
-  } catch (err) { toast("Import failed: " + err.message, "error"); }
+  } catch (err) {
+    toast("Import failed: " + err.message, "error");
+  }
 }
 
 // ══════════════════════════════════════════════════════════

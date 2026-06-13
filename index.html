@@ -2338,7 +2338,7 @@
       background: rgba(0, 0, 0, .72);
       z-index: 400;
       display: flex;
-      align-items: flex-end;
+      align-items: flex-start;
       justify-content: center;
       opacity: 0;
       pointer-events: none;
@@ -2352,15 +2352,15 @@
 
     .sheet {
       background: var(--s1);
-      border-radius: 22px 22px 0 0;
+      border-radius: 0 0 22px 22px;
       width: 100%;
       max-width: 600px;
       max-height: 92dvh;
       display: flex;
       flex-direction: column;
-      transform: translateY(100%);
+      transform: translateY(-100%);
       transition: transform .32s cubic-bezier(.2, .85, .3, 1);
-      border-top: 1px solid var(--b2);
+      border-bottom: 1px solid var(--b2);
     }
 
     .overlay.open .sheet {
@@ -2368,12 +2368,7 @@
     }
 
     .shdl {
-      width: 40px;
-      height: 4px;
-      background: var(--b3);
-      border-radius: 99px;
-      margin: 12px auto 4px;
-      flex-shrink: 0;
+      display: none;
     }
 
     .shhdr {
@@ -3338,8 +3333,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=35"></script>
-  <script src="app.js?v=35"></script>
+  <script src="config.js?v=36"></script>
+  <script src="app.js?v=36"></script>
 </body>
 
 </html>

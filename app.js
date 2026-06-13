@@ -1541,10 +1541,11 @@ function buildForm(type, pre) {
     <div class="fg">
       <div class="fl">Tags</div>
       <div class="tag-add-row">
-        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag()}">
+        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag()}" oninput="onFormTagInput(this)" autocomplete="off">
         <button class="tadd-btn" onclick="addTag()">+ Add</button>
       </div>
-      <div class="chips" id="mchips">${renderChips()}</div>
+      <div id="form-tag-autocomplete" class="chips" style="display:none; margin-top:8px;"></div>
+      <div class="chips" id="mchips" style="margin-top:8px">${renderChips()}</div>
     </div>`;
 
   const dashBlock = `
@@ -1650,6 +1651,34 @@ function addTag() {
   STATE.mTags.push(val);
   inp.value = "";
   refreshChips();
+  const dropdown = $("form-tag-autocomplete");
+  if (dropdown) dropdown.style.display = "none";
+}
+
+function onFormTagInput(inp) {
+  const q = inp.value.trim().toLowerCase();
+  const dropdown = $("form-tag-autocomplete");
+  if (!dropdown) return;
+  if (!q) { dropdown.style.display = "none"; return; }
+  const matches = getAllTags()
+    .filter(t => t.toLowerCase().includes(q) && !STATE.mTags.includes(t))
+    .slice(0, 10);
+  if (!matches.length) { dropdown.style.display = "none"; return; }
+  dropdown.style.display = "flex";
+  dropdown.innerHTML = matches.map(t => {
+    return `<span class="tag-ac-chip" onclick="selectFormTag('${esc(t)}')">#${esc(t)}</span>`;
+  }).join("");
+}
+
+function selectFormTag(tag) {
+  if (!STATE.mTags.includes(tag)) {
+    STATE.mTags.push(tag);
+    refreshChips();
+  }
+  const inp = $("tag-inp");
+  if (inp) inp.value = "";
+  const dropdown = $("form-tag-autocomplete");
+  if (dropdown) dropdown.style.display = "none";
 }
 function removeTag(t) { STATE.mTags = STATE.mTags.filter(v => v !== t); refreshChips(); }
 function renderChips() {

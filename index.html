@@ -1228,7 +1228,7 @@
       background: var(--s1);
       border: 1px solid var(--b1);
       border-radius: var(--r2);
-      overflow: hidden;
+      overflow: visible;
       transition: border-color .2s, box-shadow .35s cubic-bezier(.22,.68,0,1), transform .2s;
       border-left: 3px solid var(--b2);
       animation: cardSlideIn .4s cubic-bezier(.22,.68,0,1) both;
@@ -1538,6 +1538,7 @@
       display: flex;
       border-top: 1px solid var(--b1);
       background: var(--bg);
+      border-radius: 0 0 var(--r2) var(--r2);
     }
 
     .cab {
@@ -2945,7 +2946,7 @@
     .dash-pill.pending { background:var(--abg); color:var(--amber); }
     .dash-pill.done { background:var(--gbg); color:var(--green); }
     .dash-sec-label { font-size:10px; font-weight:700; color:var(--faint); letter-spacing:.8px; text-transform:uppercase; margin:10px 0 4px 2px; }
-    .dcard { background:var(--s1); border:1px solid var(--b1); border-radius:var(--r2); overflow:hidden; transition:border-color .2s,box-shadow .3s,transform .2s; border-left:3px solid var(--b2); animation:cardSlideIn .4s cubic-bezier(.22,.68,0,1) both; }
+    .dcard { background:var(--s1); border:1px solid var(--b1); border-radius:var(--r2); overflow:visible; transition:border-color .2s,box-shadow .3s,transform .2s; border-left:3px solid var(--b2); animation:cardSlideIn .4s cubic-bezier(.22,.68,0,1) both; }
     .dcard:hover { border-color:var(--b2); transform:translateY(-1px); }
     .dcard.done-card { opacity:.55; }
     .dcard.done-card:hover { opacity:.75; }
@@ -2967,7 +2968,7 @@
     .darr:active { transform:scale(.9); }
     .dcard-expand { font-size:11px; color:var(--faint); padding:0 6px; flex-shrink:0; transition:transform .2s; }
     .dcard.open .dcard-expand { transform:rotate(180deg); }
-    .dcard-detail { border-top:1px solid var(--b1); background:var(--s2); padding:12px 14px; font-size:12px; color:var(--muted); line-height:1.7; animation:fadeSlideUp .25s ease; }
+    .dcard-detail { border-top:1px solid var(--b1); background:var(--s2); padding:12px 14px; font-size:12px; color:var(--muted); line-height:1.7; animation:fadeSlideUp .25s ease; border-radius:0 0 var(--r2) var(--r2); }
     .dcard-detail .dd-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
     .dcard-detail .dd-label { font-size:9px; font-weight:700; color:var(--faint); width:48px; flex-shrink:0; text-transform:uppercase; letter-spacing:.5px; }
     .dcard-detail .dd-val { font-family:var(--mono); color:var(--tx); word-break:break-all; }
@@ -3335,8 +3336,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="config.js?v=31"></script>
+  <script src="app.js?v=31"></script>
 </body>
 
 </html>

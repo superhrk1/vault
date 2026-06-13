@@ -1267,25 +1267,44 @@
       transform: translateY(0);
     }
 
-    /* Per-type card accent borders — gradient fade */
-    .card-pw {
-      border-left: 3px solid var(--ac);
-      border-image: linear-gradient(180deg, var(--ac), transparent) 1;
-    }
-
-    .card-bm {
-      border-left: 3px solid var(--blue);
-      border-image: linear-gradient(180deg, var(--blue), transparent) 1;
-    }
-
-    .card-nt {
-      border-left: 3px solid var(--amber);
-      border-image: linear-gradient(180deg, var(--amber), transparent) 1;
-    }
-
+    /* Per-type card accent borders — gradient fade using pseudo-element */
+    .card-pw,
+    .card-bm,
+    .card-nt,
     .card-td {
-      border-left: 3px solid var(--green);
-      border-image: linear-gradient(180deg, var(--green), transparent) 1;
+      position: relative;
+      border-left: none;
+    }
+
+    .card-pw::before,
+    .card-bm::before,
+    .card-nt::before,
+    .card-td::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      border-radius: var(--r2) 0 0 var(--r2);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .card-pw::before {
+      background: linear-gradient(180deg, var(--ac), transparent);
+    }
+
+    .card-bm::before {
+      background: linear-gradient(180deg, var(--blue), transparent);
+    }
+
+    .card-nt::before {
+      background: linear-gradient(180deg, var(--amber), transparent);
+    }
+
+    .card-td::before {
+      background: linear-gradient(180deg, var(--green), transparent);
     }
 
     .card-top {
@@ -1793,39 +1812,39 @@
 
     /* ── TODO CARD ──────────────────────────────── */
     .todo-card {
-      border-left: 3px solid var(--ac);
+      border-left: none;
     }
 
-    .todo-card.color-red {
-      border-left-color: #f87171;
+    .todo-card.color-red::before {
+      background: linear-gradient(180deg, #f87171, transparent);
     }
 
-    .todo-card.color-orange {
-      border-left-color: #fb923c;
+    .todo-card.color-orange::before {
+      background: linear-gradient(180deg, #fb923c, transparent);
     }
 
-    .todo-card.color-amber {
-      border-left-color: #fbbf24;
+    .todo-card.color-amber::before {
+      background: linear-gradient(180deg, #fbbf24, transparent);
     }
 
-    .todo-card.color-green {
-      border-left-color: #4ade80;
+    .todo-card.color-green::before {
+      background: linear-gradient(180deg, #4ade80, transparent);
     }
 
-    .todo-card.color-teal {
-      border-left-color: #2dd4bf;
+    .todo-card.color-teal::before {
+      background: linear-gradient(180deg, #2dd4bf, transparent);
     }
 
-    .todo-card.color-blue {
-      border-left-color: #60a5fa;
+    .todo-card.color-blue::before {
+      background: linear-gradient(180deg, #60a5fa, transparent);
     }
 
-    .todo-card.color-purple {
-      border-left-color: #7c6af5;
+    .todo-card.color-purple::before {
+      background: linear-gradient(180deg, #7c6af5, transparent);
     }
 
-    .todo-card.color-pink {
-      border-left-color: #f472b6;
+    .todo-card.color-pink::before {
+      background: linear-gradient(180deg, #f472b6, transparent);
     }
 
     .todo-detail {

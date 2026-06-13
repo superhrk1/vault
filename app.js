@@ -278,11 +278,13 @@ function openApp() {
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   // Check if user just returned from OAuth (fresh connect)
   if (STATE.drive.token && !STATE.drive.lastSync) {
-    // Just connected — show toast and auto-sync
+    // Just connected — show toast and pull first to prevent overwriting cloud backup
     setTimeout(() => {
       toast("Google Drive connected", "success");
       renderSyncBadge();
-      triggerSync();
+      pullFromDrive().then(success => {
+        if (success) triggerSync();
+      });
     }, 400);
   } else if (STATE.drive.token) {
     setTimeout(() => pullFromDrive(), 400);
@@ -305,7 +307,9 @@ function openApp() {
   if (!window._onlineSyncListener) {
     window._onlineSyncListener = () => {
       if (STATE.drive.token && STATE.masterKey) {
-        pullFromDrive().then(() => triggerSync());
+        pullFromDrive().then(success => {
+          if (success) triggerSync();
+        });
       }
     };
     window.addEventListener("online", window._onlineSyncListener);
@@ -869,9 +873,9 @@ async function uploadVault() {
 async function pullFromDrive() {
   if (!navigator.onLine) {
     setSyncStatus("offline");
-    return;
+    return false;
   }
-  if (!STATE.drive.token) { toast("Connect Drive first"); return; }
+  if (!STATE.drive.token) { toast("Connect Drive first"); return false; }
   setSyncStatus("syncing");
   try {
     let fileId = STATE.drive.fileId;
@@ -879,7 +883,7 @@ async function pullFromDrive() {
       const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}'`);
       const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id)`);
       const dat = await res.json();
-      if (!dat.files?.length) { toast("No backup found on Drive"); setSyncStatus("synced"); return; }
+      if (!dat.files?.length) { toast("No backup found on Drive"); setSyncStatus("synced"); return true; }
       fileId = dat.files[0].id;
       STATE.drive.fileId = fileId;
       LS.set("drive_file_id", fileId);
@@ -925,11 +929,13 @@ async function pullFromDrive() {
       toast("Vault is up to date", "info");
     }
     renderDrivePanel();
+    return true;
   } catch (e) {
     setSyncStatus("error");
     if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
     else if (e.message === "Failed to fetch") toast("Offline — using local vault", "info");
     else toast("Pull failed: " + e.message, "error");
+    return false;
   }
 }
 

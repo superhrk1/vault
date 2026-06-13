@@ -1410,6 +1410,21 @@
       transform: rotate(180deg);
     }
 
+    .card-drawer {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.28s cubic-bezier(.22, 1, .36, 1);
+      overflow: hidden;
+    }
+
+    .card.open .card-drawer {
+      grid-template-rows: 1fr;
+    }
+
+    .card-drawer-inner {
+      min-height: 0;
+    }
+
     /* ── CARD DETAIL ────────────────────────────── */
     .card-detail {
       border-top: 1px solid var(--b1);
@@ -3333,8 +3348,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=36"></script>
-  <script src="app.js?v=36"></script>
+  <script src="config.js?v=37"></script>
+  <script src="app.js?v=37"></script>
 </body>
 
 </html>

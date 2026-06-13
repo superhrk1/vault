@@ -1209,9 +1209,12 @@ function cardHTML(item) {
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
       <div class="chev">⌄</div>
     </div>
-    ${exp ? `
-    <div class="card-detail">${detailHTML(item)}</div>
-    <div class="card-actions">${actionsHTML(item)}</div>` : ""}
+    <div class="card-drawer">
+      <div class="card-drawer-inner">
+        <div class="card-detail">${detailHTML(item)}</div>
+        <div class="card-actions">${actionsHTML(item)}</div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1228,34 +1231,17 @@ function todoCardHTML(item) {
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
-  let detail = "";
-  if (exp) {
-    const pct = total ? Math.round(done/total*100) : 0;
-    let tree = subs.map(s => {
-      const d = s.done;
-      return `<div class="todo-item sub">
-        <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone('${id}','${s.id}')">${d?"✓":""}</div>
-        <div class="todo-text${d?" done-text":""}">${esc(s.text)}</div>
-      </div>`;
-    }).join("");
-
-    const noteBlock = item.note ? `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>` : "";
-    const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${esc(t)}</span>`).join("")}</div>` : "";
-
-    detail = `<div class="todo-detail">
-      <div class="todo-progress">
-        <div class="todo-prog-bar"><div class="todo-prog-fill" style="width:${pct}%"></div></div>
-        <div class="todo-prog-label">${done}/${total} done</div>
-      </div>
-      <div class="todo-tree">${tree}</div>
-      ${noteBlock}${tagBlock}
-    </div>
-    <div class="card-actions">
-      <button class="cab" style="color:var(--amber)" onclick="toggleFav('${id}')"><span class="ca-ico">${item.fav?"★":"☆"}</span>Fav</button>
-      <button class="cab" style="color:var(--ac2)" onclick="openEdit('${id}')"><span class="ca-ico">✏️</span>Edit</button>
-      <button class="cab" style="color:var(--red)" onclick="askDelete('${id}')"><span class="ca-ico">🗑</span>Delete</button>
+  const pct = total ? Math.round(done/total*100) : 0;
+  let tree = subs.map(s => {
+    const d = s.done;
+    return `<div class="todo-item sub">
+      <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone('${id}','${s.id}')">${d?"✓":""}</div>
+      <div class="todo-text${d?" done-text":""}">${esc(s.text)}</div>
     </div>`;
-  }
+  }).join("");
+
+  const noteBlock = item.note ? `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>` : "";
+  const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${esc(t)}</span>`).join("")}</div>` : "";
 
   const ago = getItemAge(item);
 
@@ -1267,9 +1253,25 @@ function todoCardHTML(item) {
         <div class="cs">${done} of ${total} completed</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
-      <div class="chev"${exp?' style="transform:rotate(180deg)"':""}>⌄</div>
+      <div class="chev">⌄</div>
     </div>
-    ${detail}
+    <div class="card-drawer">
+      <div class="card-drawer-inner">
+        <div class="todo-detail">
+          <div class="todo-progress">
+            <div class="todo-prog-bar"><div class="todo-prog-fill" style="width:${pct}%"></div></div>
+            <div class="todo-prog-label">${done}/${total} done</div>
+          </div>
+          <div class="todo-tree">${tree}</div>
+          ${noteBlock}${tagBlock}
+        </div>
+        <div class="card-actions">
+          <button class="cab" style="color:var(--amber)" onclick="toggleFav('${id}')"><span class="ca-ico">${item.fav?"★":"☆"}</span>Fav</button>
+          <button class="cab" style="color:var(--ac2)" onclick="openEdit('${id}')"><span class="ca-ico">✏️</span>Edit</button>
+          <button class="cab" style="color:var(--red)" onclick="askDelete('${id}')"><span class="ca-ico">🗑</span>Delete</button>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1362,11 +1364,21 @@ function cab(ico, label, cls, fn) {
 function toggleCard(id) {
   // Hide any revealed passwords when switching cards
   STATE.pwVisible = {};
-  STATE.expandedId = STATE.expandedId === id ? null : id;
-  renderList();
-  if (STATE.expandedId) {
+  const wasExpanded = STATE.expandedId === id;
+  STATE.expandedId = wasExpanded ? null : id;
+  
+  // Directly manipulate DOM classes for buttery smooth opening/closing transitions
+  const prevOpen = document.querySelector(".card.open");
+  const newOpen = $("card-" + id);
+  
+  if (prevOpen) {
+    prevOpen.classList.remove("open");
+  }
+  
+  if (!wasExpanded && newOpen) {
+    newOpen.classList.add("open");
     requestAnimationFrame(() => {
-      $("card-"+id)?.scrollIntoView({ behavior:"smooth", block:"nearest" });
+      newOpen.scrollIntoView({ behavior:"smooth", block:"nearest" });
     });
   }
 }

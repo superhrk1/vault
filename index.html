@@ -1625,17 +1625,42 @@
       color: var(--red);
     }
 
-    /* ── SETTINGS ───────────────────────────────── */
     #settings {
-      display: none;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 320px;
+      max-width: 85%;
+      background: var(--s1);
+      z-index: 1000;
+      box-shadow: -5px 0 25px rgba(0, 0, 0, .4);
+      display: flex;
       flex-direction: column;
       overflow-y: auto;
-      flex: 1;
-      padding-bottom: 80px;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     #settings.show {
-      display: flex;
+      transform: translateX(0);
+    }
+
+    #settings-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+      transition: opacity .3s ease;
+    }
+
+    #settings-backdrop.show {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .set-sec {
@@ -2288,36 +2313,53 @@
     /* ── BOTTOM NAV ─────────────────────────────── */
     #nav {
       flex-shrink: 0;
-      background: rgba(17, 18, 25, .85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(17, 18, 25, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border-top: 1px solid var(--b1);
       display: flex;
       padding-bottom: max(10px, var(--sbt));
+      overflow-x: auto;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
+    #nav::-webkit-scrollbar { display: none; }
 
     .nav-item {
       flex: 1;
+      min-width: 55px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 3px;
-      padding: 10px 0 6px;
+      gap: 4px;
+      padding: 12px 0 8px;
       cursor: pointer;
-      color: var(--faint);
+      color: var(--muted);
       font-size: 9px;
-      font-weight: 700;
-      letter-spacing: .4px;
-      text-transform: uppercase;
-      transition: color .2s;
+      font-weight: 600;
+      letter-spacing: .3px;
+      background: transparent;
+      border-top: 3px solid transparent;
+      transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .nav-item.on {
       color: var(--ac2);
+      background: linear-gradient(180deg, rgba(124, 106, 245, 0.08) 0%, rgba(124, 106, 245, 0) 100%);
+      border-top-color: var(--ac);
+      padding-top: 9px;
+    }
+
+    .nav-item:active {
+      transform: scale(0.95);
     }
 
     .ni {
-      font-size: 22px;
+      font-size: 20px;
+      transition: transform .2s ease;
+    }
+    .nav-item.on .ni {
+      transform: translateY(-2px);
     }
 
     /* ── FAB ─────────────────────────────────────── */
@@ -3157,6 +3199,7 @@
     </div>
     <div class="sb-r">
       <div class="hbtn" onclick="triggerSync()" title="Sync to Drive"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 16.5-5.3L21.5 8"/><path d="M21.5 12.5a10 10 0 0 1-16.5 5.3L2.5 16"/></svg></div>
+      <div class="hbtn" onclick="toggleSettings(true)" title="Settings">⚙️</div>
       <div class="hbtn" onclick="lockVault()" title="Lock vault">🔒</div>
     </div>
     <div id="autolock-bar" style="width:100%"></div>
@@ -3170,15 +3213,7 @@
     <span class="db-close" onclick="dismissBanner()">✕</span>
   </div>
 
-  <!-- ─── TABS ───────────────────────────────────────────── -->
-  <div id="tabs">
-    <div class="tab on" onclick="switchTab(this,'dash')">Today</div>
-    <div class="tab" onclick="switchTab(this,'all')">All</div>
-    <div class="tab" onclick="switchTab(this,'password')">Passwords</div>
-    <div class="tab" onclick="switchTab(this,'bookmark')">Bookmarks</div>
-    <div class="tab" onclick="switchTab(this,'note')">Notes</div>
-    <div class="tab" onclick="switchTab(this,'todo')">Todos</div>
-  </div>
+
 
   <!-- ─── SEARCH + TAG FILTER ───────────────────────────── -->
   <div id="search-row">
@@ -3209,6 +3244,10 @@
 
   <!-- ─── SETTINGS PAGE ──────────────────────────────────── -->
   <div id="settings">
+    <div class="drawer-hdr" style="padding:18px; border-bottom:1px solid var(--b1); display:flex; justify-content:space-between; align-items:center; background:var(--s2); flex-shrink:0">
+      <div style="font-weight:700; font-size:14px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--tx)">Settings</div>
+      <div onclick="toggleSettings(false)" style="cursor:pointer; color:var(--muted); font-size:16px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:var(--s3); font-weight:bold">✕</div>
+    </div>
 
     <div class="set-sec">
       <div class="set-lbl">Statistics</div>
@@ -3313,13 +3352,28 @@
 
   </div><!-- /settings -->
 
+  <!-- Settings backdrop overlay -->
+  <div id="settings-backdrop" onclick="toggleSettings(false)"></div>
+
   <!-- ─── BOTTOM NAV ─────────────────────────────────────── -->
   <div id="nav">
-    <div class="nav-item on" id="nav-home" onclick="showPage('home')">
-      <span class="ni">🏠</span><span>Home</span>
+    <div class="nav-item on" onclick="switchTab(this,'dash')">
+      <span class="ni">🏠</span><span>Today</span>
     </div>
-    <div class="nav-item" id="nav-set" onclick="showPage('settings')">
-      <span class="ni">⚙️</span><span>Settings</span>
+    <div class="nav-item" onclick="switchTab(this,'all')">
+      <span class="ni">📁</span><span>All</span>
+    </div>
+    <div class="nav-item" onclick="switchTab(this,'password')">
+      <span class="ni">🔑</span><span>Passwords</span>
+    </div>
+    <div class="nav-item" onclick="switchTab(this,'bookmark')">
+      <span class="ni">🔖</span><span>Bookmarks</span>
+    </div>
+    <div class="nav-item" onclick="switchTab(this,'note')">
+      <span class="ni">📝</span><span>Notes</span>
+    </div>
+    <div class="nav-item" onclick="switchTab(this,'todo')">
+      <span class="ni">✅</span><span>Todos</span>
     </div>
   </div>
 
@@ -3363,8 +3417,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=41"></script>
-  <script src="app.js?v=41"></script>
+  <script src="config.js?v=44"></script>
+  <script src="app.js?v=44"></script>
 </body>
 
 </html>

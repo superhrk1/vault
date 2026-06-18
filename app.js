@@ -345,6 +345,7 @@ function openApp() {
 }
 
 function lockVault() {
+  toggleSettings(false);
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
   sessionStorage.removeItem("vault_session_key");
@@ -1244,7 +1245,7 @@ function switchTab(el, t) {
   STATE.expandedId = null;
   STATE.pwVisible = {};
   _dashExpanded = null;
-  document.querySelectorAll(".tab").forEach(e => e.classList.remove("on"));
+  document.querySelectorAll(".nav-item").forEach(e => e.classList.remove("on"));
   el.classList.add("on");
   const isDash = t === "dash";
   const dashEl = $("dashboard");
@@ -2475,22 +2476,30 @@ function animateCounter(el, target) {
 //  PAGE NAV
 // ══════════════════════════════════════════════════════════
 function showPage(p) {
-  const home = p === "home";
   const isDash = STATE.tab === "dash";
-  ["statusbar","tabs"].forEach(id => {
-    const el = $(id); if (el) el.style.display = home ? "" : "none";
-  });
-  if ($("search-row")) $("search-row").style.display = (home && !isDash) ? "" : "none";
-  if ($("tag-filter-row")) $("tag-filter-row").style.display = (home && !isDash) ? "flex" : "none";
-  if ($("list")) $("list").style.display = (home && !isDash) ? "flex" : "none";
-  if ($("dashboard")) $("dashboard").style.display = (home && isDash) ? "flex" : "none";
-  $("drive-banner").style.display = (home && !STATE.drive.token && !LS.get("drive_banner_dismissed")) ? "flex" : "none";
-  $("settings").classList.toggle("show", !home);
-  $("fab").style.display = home ? "flex" : "none";
-  $("nav-home").classList.toggle("on", home);
-  $("nav-set").classList.toggle("on", !home);
-  if (!home) { updateStats(); renderDrivePanel(); renderSQSettings(); }
-  if (home && isDash) renderDashboard();
+  const statusbar = $("statusbar"); if (statusbar) statusbar.style.display = "";
+  if ($("search-row")) $("search-row").style.display = !isDash ? "" : "none";
+  if ($("tag-filter-row")) $("tag-filter-row").style.display = !isDash ? "flex" : "none";
+  if ($("list")) $("list").style.display = !isDash ? "flex" : "none";
+  if ($("dashboard")) $("dashboard").style.display = isDash ? "flex" : "none";
+  $("drive-banner").style.display = (!STATE.drive.token && !LS.get("drive_banner_dismissed")) ? "flex" : "none";
+  $("fab").style.display = "flex";
+  if (isDash) renderDashboard();
+}
+
+function toggleSettings(show) {
+  const s = $("settings");
+  const b = $("settings-backdrop");
+  if (show) {
+    if (s) s.classList.add("show");
+    if (b) b.classList.add("show");
+    updateStats();
+    renderDrivePanel();
+    renderSQSettings();
+  } else {
+    if (s) s.classList.remove("show");
+    if (b) b.classList.remove("show");
+  }
 }
 
 function dismissBanner() {

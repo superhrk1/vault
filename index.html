@@ -1010,38 +1010,127 @@
       display: none;
     }
 
-    /* autocomplete suggestions */
-    #tag-autocomplete {
+    /* Advanced Search Suggestions Dropdown */
+    .sbox-container {
+      position: relative;
+      flex: 1;
+    }
+
+    #search-suggestions {
       display: none;
-      flex-wrap: wrap;
-      gap: 5px;
-      padding-top: 2px;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: rgba(30, 32, 44, 0.93);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--b2);
+      border-radius: var(--r);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+      z-index: 1000;
+      max-height: 380px;
+      overflow-y: auto;
+      flex-direction: column;
+      padding: 6px 0;
+      animation: suggestFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .tag-ac-chip {
-      padding: 4px 12px;
-      background: var(--s2);
-      border: 1px solid var(--b1);
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--muted);
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+    @keyframes suggestFadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .tag-ac-chip:active,
-    .tag-ac-chip:hover {
-      background: var(--acbg);
-      border-color: var(--ac);
-      color: var(--ac2);
+    .suggest-group {
+      display: flex;
+      flex-direction: column;
     }
 
-    .tag-ac-count {
-      font-size: 10px;
+    .suggest-header {
+      font-size: 9px;
+      font-weight: 800;
       color: var(--faint);
-      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 6px 12px 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      background: rgba(0, 0, 0, 0.08);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .suggestion-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--tx);
+      transition: all 0.15s ease;
+      gap: 10px;
+    }
+
+    .suggestion-item:hover,
+    .suggestion-item.active {
+      background: rgba(124, 106, 245, 0.12);
+      color: #fff;
+    }
+
+    .suggest-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .suggest-icon {
+      font-size: 14px;
+      opacity: 0.8;
+      flex-shrink: 0;
+    }
+
+    .suggest-text {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .suggest-subtext {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-left: 6px;
+    }
+
+    .suggest-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--ac2);
+      background: var(--acbg);
+      border: 1px solid rgba(124, 106, 245, 0.2);
+      padding: 2px 6px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .match-highlight {
+      background: rgba(251, 191, 36, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+
+    .suggest-empty {
+      padding: 18px 12px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      font-style: italic;
     }
 
     /* selected tags */
@@ -1050,6 +1139,7 @@
       flex-wrap: wrap;
       gap: 5px;
       align-items: center;
+      width: 100%;
     }
 
     .stag {
@@ -1090,6 +1180,33 @@
 
     .stag-clear:hover {
       color: var(--red);
+    }
+
+    /* Tag matching strategy toggle */
+    .strategy-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      margin-left: auto;
+    }
+    .strategy-toggle:hover {
+      border-color: var(--ac);
+      color: var(--ac2);
+      background: var(--acbg);
+    }
+    .strategy-toggle .val {
+      color: var(--ac2);
+      font-weight: 800;
     }
 
     /* ── FLAG / EXPIRY BADGE ───────────────────────── */
@@ -3217,22 +3334,20 @@
 
   <!-- ─── SEARCH + TAG FILTER ───────────────────────────── -->
   <div id="search-row">
-    <div class="sbox">
-      <span class="sico">🔍</span>
-      <input id="q" class="sinp" type="search" placeholder="Search items…" oninput="onSearch(this)">
-      <span id="q-clear" onclick="clearSearch()">✕</span>
+    <div class="sbox-container">
+      <div class="sbox">
+        <span class="sico">🔍</span>
+        <input id="q" class="sinp" type="search" placeholder="Search title, username, or #tag…" oninput="onSearch(this)" onfocus="onSearchFocus(this)" onkeydown="onSearchKeyDown(event)" autocomplete="off">
+        <span id="q-clear" onclick="clearSearch()">✕</span>
+      </div>
+      <div id="search-suggestions"></div>
     </div>
-    <div class="sbox" style="max-width:180px">
-      <span class="tag-sico">🏷️</span>
-      <input id="tag-q" class="sinp" placeholder="Tag…" oninput="onTagSearch(this)" autocomplete="off" style="padding-left:32px">
-      <span id="tag-q-clear" onclick="clearTagSearch()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;cursor:pointer;color:var(--faint);display:none">✕</span>
-    </div>
+    <button class="fbtn" id="deep-btn" onclick="toggleDeepSearch()" title="Search descriptions and notes">🔍 Deep</button>
     <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">⭐ Fav</button>
   </div>
 
   <!-- ─── TAG AUTOCOMPLETE / SELECTED ──────────────────── -->
   <div id="tag-filter-row">
-    <div id="tag-autocomplete"></div>
     <div id="selected-tags"></div>
   </div>
 

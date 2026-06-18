@@ -764,11 +764,15 @@
     /* ── TABS ───────────────────────────────────── */
     #tabs {
       flex-shrink: 0;
-      background: var(--bg);
-      border-bottom: 1px solid var(--b1);
+      background: rgba(17, 18, 25, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--b1);
+      border-radius: 13px;
       display: flex;
-      padding: 8px 12px;
-      gap: 8px;
+      padding: 4px;
+      margin: 10px 14px 6px;
+      gap: 4px;
       overflow-x: auto;
       -ms-overflow-style: none;
       scrollbar-width: none;
@@ -776,25 +780,32 @@
     #tabs::-webkit-scrollbar { display: none; }
 
     .tab {
+      flex: 1;
       padding: 7px 16px;
       text-align: center;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--muted);
       cursor: pointer;
-      border: 1px solid var(--b2);
-      border-radius: 99px;
-      background: var(--s1);
-      transition: all .2s;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      transition: all .25s cubic-bezier(0.4, 0, 0.2, 1);
       letter-spacing: .3px;
       white-space: nowrap;
       flex-shrink: 0;
     }
 
+    .tab:hover {
+      color: var(--tx);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
     .tab.on {
       color: #fff;
       background: var(--ac);
-      border-color: var(--ac);
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(124, 106, 245, 0.25);
     }
 
     /* ── SEARCH ─────────────────────────────────── */
@@ -965,6 +976,8 @@
     .tag-sico {
       position: absolute;
       left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
       font-size: 13px;
       color: var(--faint);
       pointer-events: none;
@@ -3348,8 +3361,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=37"></script>
-  <script src="app.js?v=37"></script>
+  <script src="config.js?v=40"></script>
+  <script src="app.js?v=40"></script>
 </body>
 
 </html>

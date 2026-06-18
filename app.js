@@ -6,6 +6,26 @@
 
 "use strict";
 
+// ── Silent OAuth iframe handler ───────────────────────────
+// If we're inside a hidden iframe for silent token refresh,
+// extract the token and send it back to the parent — don't boot the app.
+if (window !== window.parent && location.hash.includes("access_token")) {
+  try {
+    const params = new URLSearchParams(location.hash.slice(1));
+    const token = params.get("access_token");
+    const expiresIn = parseInt(params.get("expires_in") || "3600", 10);
+    window.parent.postMessage({
+      type: "vault-silent-auth",
+      token: token,
+      expiresIn: expiresIn,
+    }, location.origin);
+  } catch (e) {
+    window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+  }
+  // Stop — don't initialize the full app in the iframe
+  throw new Error("SILENT_AUTH_IFRAME_HALT");
+}
+
 // ── Shortcuts ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const enc = s  => new TextEncoder().encode(s);
@@ -86,10 +106,11 @@ let STATE = {
   mDashboard       : false,
   autoLockMin      : 5,
   drive: {
-    token     : null,
-    fileId    : null,
-    status    : "offline",
-    lastSync  : null,
+    token       : null,
+    tokenExpiry : null,
+    fileId      : null,
+    status      : "offline",
+    lastSync    : null,
   }
 };
 
@@ -137,9 +158,10 @@ async function boot() {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
   handleOAuthCallback();
-  STATE.drive.token    = LS.get("drive_token");
-  STATE.drive.fileId   = LS.get("drive_file_id");
-  STATE.drive.lastSync = LS.get("drive_last_sync");
+  STATE.drive.token       = LS.get("drive_token");
+  STATE.drive.tokenExpiry = LS.get("drive_token_expiry");
+  STATE.drive.fileId      = LS.get("drive_file_id");
+  STATE.drive.lastSync    = LS.get("drive_last_sync");
   STATE.autoLockMin    = LS.get("vault_autolock") ?? 5;
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
@@ -731,8 +753,125 @@ function handleOAuthCallback() {
   if (!token) return;
   STATE.drive.token = token;
   LS.set("drive_token", token);
+  // Store token expiry (Google sends expires_in in seconds, default 3600)
+  const expiresIn = parseInt(params.get("expires_in") || "3600", 10);
+  const expiry = Date.now() + expiresIn * 1000;
+  STATE.drive.tokenExpiry = expiry;
+  LS.set("drive_token_expiry", expiry);
   // Clean URL
   history.replaceState(null, "", location.pathname);
+}
+
+function isTokenExpired() {
+  if (!STATE.drive.tokenExpiry) return false; // no expiry stored, try anyway
+  return Date.now() >= STATE.drive.tokenExpiry - 60000; // expired or within 1 min
+}
+
+function getOAuthRedirectUri() {
+  let redirectUri = location.origin + location.pathname;
+  redirectUri = redirectUri.replace(/\/index\.html$/, "/");
+  if (!redirectUri.endsWith("/")) redirectUri += "/";
+  return redirectUri;
+}
+
+// Attempt silent token refresh via hidden iframe (prompt=none)
+let _silentRefreshInProgress = false;
+function silentTokenRefresh() {
+  if (_silentRefreshInProgress) return Promise.resolve(false);
+  const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId.startsWith("PASTE_")) return Promise.resolve(false);
+  _silentRefreshInProgress = true;
+
+  return new Promise((resolve) => {
+    const redirectUri = getOAuthRedirectUri();
+    const params = new URLSearchParams({
+      client_id    : clientId,
+      redirect_uri : redirectUri,
+      response_type: "token",
+      scope        : VAULT_CONFIG.DRIVE_SCOPE,
+      prompt       : "none",        // silent — no UI
+    });
+    const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "display:none;width:0;height:0;border:0";
+    iframe.id = "silent-auth-frame";
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve(false);
+    }, 8000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      _silentRefreshInProgress = false;
+      try { iframe.remove(); } catch {}
+    }
+
+    function onMessage(e) {
+      // Only accept messages from our own origin
+      if (e.origin !== location.origin) return;
+      if (e.data?.type === "vault-silent-auth") {
+        window.removeEventListener("message", onMessage);
+        cleanup();
+        if (e.data.token) {
+          STATE.drive.token = e.data.token;
+          LS.set("drive_token", e.data.token);
+          const expiry = Date.now() + (e.data.expiresIn || 3600) * 1000;
+          STATE.drive.tokenExpiry = expiry;
+          LS.set("drive_token_expiry", expiry);
+          STATE.drive.status = "synced";
+          renderSyncBadge();
+          console.log("[Vault] Silent token refresh succeeded");
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      }
+    }
+    window.addEventListener("message", onMessage);
+
+    // The iframe will load back to our page with the hash fragment.
+    // We need the page to detect it's in an iframe and postMessage back.
+    iframe.src = authUrl;
+    document.body.appendChild(iframe);
+
+    // Also listen for iframe load to check hash directly
+    iframe.addEventListener("load", () => {
+      try {
+        const iframeHash = iframe.contentWindow.location.hash;
+        if (iframeHash && iframeHash.includes("access_token")) {
+          const iParams = new URLSearchParams(iframeHash.slice(1));
+          const token = iParams.get("access_token");
+          if (token) {
+            window.removeEventListener("message", onMessage);
+            cleanup();
+            STATE.drive.token = token;
+            LS.set("drive_token", token);
+            const expiresIn = parseInt(iParams.get("expires_in") || "3600", 10);
+            const expiry = Date.now() + expiresIn * 1000;
+            STATE.drive.tokenExpiry = expiry;
+            LS.set("drive_token_expiry", expiry);
+            STATE.drive.status = "synced";
+            renderSyncBadge();
+            console.log("[Vault] Silent token refresh succeeded (iframe load)");
+            resolve(true);
+            return;
+          }
+        }
+        // If error in hash (e.g., interaction_required), fail silently
+        if (iframeHash && iframeHash.includes("error")) {
+          window.removeEventListener("message", onMessage);
+          cleanup();
+          console.log("[Vault] Silent refresh failed:", iframeHash);
+          resolve(false);
+        }
+      } catch (e) {
+        // Cross-origin — iframe loaded Google's page, not ours yet
+        // Wait for redirect back to our origin
+      }
+    });
+  });
 }
 
 function connectDrive() {
@@ -741,10 +880,7 @@ function connectDrive() {
     toast("Add your Client ID to config.js first — see SETUP.md");
     return;
   }
-  // Normalize redirect URI: strip index.html, ensure trailing slash
-  let redirectUri = location.origin + location.pathname;
-  redirectUri = redirectUri.replace(/\/index\.html$/, "/");
-  if (!redirectUri.endsWith("/")) redirectUri += "/";
+  const redirectUri = getOAuthRedirectUri();
   console.log("OAuth redirect_uri:", redirectUri);
   const params = new URLSearchParams({
     client_id    : clientId,
@@ -759,10 +895,12 @@ function connectDrive() {
 }
 
 function disconnectDrive() {
-  STATE.drive.token  = null;
-  STATE.drive.fileId = null;
-  STATE.drive.status = "offline";
+  STATE.drive.token       = null;
+  STATE.drive.tokenExpiry = null;
+  STATE.drive.fileId      = null;
+  STATE.drive.status      = "offline";
   LS.del("drive_token");
+  LS.del("drive_token_expiry");
   LS.del("drive_file_id");
   LS.del("drive_last_sync");
   renderDrivePanel();
@@ -770,7 +908,22 @@ function disconnectDrive() {
   toast("Drive disconnected", "info");
 }
 
-async function driveReq(url, opts = {}) {
+async function driveReq(url, opts = {}, _retried = false) {
+  // Proactively refresh if token is expired (before wasting a round-trip)
+  if (isTokenExpired() && !_retried) {
+    console.log("[Vault] Token expired, attempting silent refresh...");
+    const refreshed = await silentTokenRefresh();
+    if (!refreshed) {
+      STATE.drive.token = null;
+      LS.del("drive_token");
+      LS.del("drive_token_expiry");
+      STATE.drive.status = "error";
+      renderSyncBadge();
+      renderDrivePanel();
+      throw new Error("SESSION_EXPIRED");
+    }
+  }
+
   const res = await fetch(url, {
     ...opts,
     headers: {
@@ -779,9 +932,18 @@ async function driveReq(url, opts = {}) {
     },
   });
   if (res.status === 401 || res.status === 403) {
-    // Token expired or insufficient scope
+    // Token expired or insufficient scope — try silent refresh once
+    if (!_retried) {
+      console.log("[Vault] Got 401/403, attempting silent token refresh...");
+      const refreshed = await silentTokenRefresh();
+      if (refreshed) {
+        return driveReq(url, opts, true); // retry with fresh token
+      }
+    }
     STATE.drive.token = null;
+    STATE.drive.tokenExpiry = null;
     LS.del("drive_token");
+    LS.del("drive_token_expiry");
     STATE.drive.status = "error";
     renderSyncBadge();
     renderDrivePanel();

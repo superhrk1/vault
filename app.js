@@ -33,6 +33,17 @@ const dec = b  => new TextDecoder().decode(b);
 const rnd = n  => crypto.getRandomValues(new Uint8Array(n));
 const b64e = u => btoa(String.fromCharCode(...u));
 const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+// ── SVG Icons for Card Actions ─────────────────────────────
+const SVGS = {
+  user: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  key: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  link: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+  starFilled: `<svg class="cab-svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  starEmpty: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  edit: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  trash: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`
+};
 const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const vibrate = ms => { try { navigator?.vibrate?.(ms); } catch {} };
@@ -98,6 +109,7 @@ let STATE = {
   focusedSuggestionIndex: -1,
   suggestions      : [],
   deepSearch       : false,
+  autoSuggest      : false,
   sort             : "urgency",   // urgency | name | name-d | new | old | type
   expandedId       : null,
   pwVisible        : {},
@@ -204,6 +216,7 @@ async function boot() {
   checkLockout();
   // Restore auto-lock setting UI
   initAutoLockUI();
+  autoBiometricUnlock();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -374,6 +387,7 @@ function lockVault() {
   $("lock-hint").style.display = "";
   // Ensure lock-card is visible
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
+  autoBiometricUnlock();
 }
 
 function setLockErr(msg) { $("lock-err").textContent = msg; }
@@ -429,6 +443,7 @@ function endLockout() {
   // Re-show forgot link and biometric if available
   if (LS.get("vault_sq_question")) $("forgot-link").style.display = "";
   if (LS.get("vault_bio_cred")) $("bio-section").classList.add("show");
+  autoBiometricUnlock();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -487,6 +502,7 @@ function backToPin() {
   $("forgot-link").style.display = "";
   if (LS.get("vault_bio_cred")) $("bio-section").classList.add("show");
   _pin = ""; renderPinDots();
+  autoBiometricUnlock();
 }
 
 let _pinResetMode = false;
@@ -703,9 +719,11 @@ async function registerBiometric(pin) {
   }
 }
 
+let _bioInProgress = false;
 async function biometricUnlock() {
   const credId = LS.get("vault_bio_cred");
-  if (!credId) return;
+  if (!credId || _bioInProgress) return;
+  _bioInProgress = true;
 
   try {
     const challenge = crypto.getRandomValues(new Uint8Array(32));
@@ -744,6 +762,20 @@ async function biometricUnlock() {
     }
   } catch (e) {
     setLockErr("Fingerprint cancelled — use PIN");
+  } finally {
+    _bioInProgress = false;
+  }
+}
+
+async function autoBiometricUnlock() {
+  if (LS.get("vault_bio_cred") && await isBioAvailable()) {
+    // Prevent auto-triggering if user is locked out
+    if (LS.get("vault_lockout_until") && parseInt(LS.get("vault_lockout_until"), 10) > Date.now()) {
+      return;
+    }
+    setTimeout(() => {
+      biometricUnlock();
+    }, 350);
   }
 }
 
@@ -1320,32 +1352,34 @@ function generateSuggestions(query) {
       })
       .slice(0, 5);
       
-    // 2. Match Titles
-    matchingTitles = allItems
-      .filter(i => i.title && i.title.toLowerCase().includes(q))
-      .slice(0, 5)
-      .map(i => ({ type: "title", text: i.title, item: i }));
-      
-    // 3. Match Usernames
-    matchingUsernames = allItems
-      .filter(i => i.username && i.username.toLowerCase().includes(q))
-      .slice(0, 5)
-      .map(i => ({ type: "username", text: i.username, item: i }));
-      
-    // 4. Match Notes / Descriptions (Deep search only)
-    if (STATE.deepSearch) {
-      matchingNotes = allItems
-        .filter(i => i.note && i.note.toLowerCase().includes(q))
+    // 2. Match Titles (Suggest only)
+    if (STATE.autoSuggest) {
+      matchingTitles = allItems
+        .filter(i => i.title && i.title.toLowerCase().includes(q))
         .slice(0, 5)
-        .map(i => {
-          const idx = i.note.toLowerCase().indexOf(q);
-          const start = Math.max(0, idx - 20);
-          const end = Math.min(i.note.length, idx + q.length + 20);
-          let snippet = i.note.slice(start, end).replace(/\n/g, " ");
-          if (start > 0) snippet = "..." + snippet;
-          if (end < i.note.length) snippet = snippet + "...";
-          return { type: "note", text: snippet, item: i, rawText: q };
-        });
+        .map(i => ({ type: "title", text: i.title, item: i }));
+        
+      // 3. Match Usernames
+      matchingUsernames = allItems
+        .filter(i => i.username && i.username.toLowerCase().includes(q))
+        .slice(0, 5)
+        .map(i => ({ type: "username", text: i.username, item: i }));
+        
+      // 4. Match Notes / Descriptions (Deep search only)
+      if (STATE.deepSearch) {
+        matchingNotes = allItems
+          .filter(i => i.note && i.note.toLowerCase().includes(q))
+          .slice(0, 5)
+          .map(i => {
+            const idx = i.note.toLowerCase().indexOf(q);
+            const start = Math.max(0, idx - 20);
+            const end = Math.min(i.note.length, idx + q.length + 20);
+            let snippet = i.note.slice(start, end).replace(/\n/g, " ");
+            if (start > 0) snippet = "..." + snippet;
+            if (end < i.note.length) snippet = snippet + "...";
+            return { type: "note", text: snippet, item: i, rawText: q };
+          });
+      }
     }
   } else {
     // Show top tags when search is empty
@@ -1502,6 +1536,15 @@ function toggleDeepSearch() {
   if (qEl) generateSuggestions(qEl.value);
   renderList();
   toast(STATE.deepSearch ? "Deep search enabled 🔍" : "Deep search disabled", "info");
+}
+
+function toggleAutoSuggest() {
+  STATE.autoSuggest = !STATE.autoSuggest;
+  const btn = $("suggest-btn");
+  if (btn) btn.classList.toggle("on", STATE.autoSuggest);
+  const qEl = $("q");
+  if (qEl) generateSuggestions(qEl.value);
+  toast(STATE.autoSuggest ? "Autocomplete suggestions enabled ✨" : "Autocomplete disabled (tags only)", "info");
 }
 
 function onSearchKeyDown(e) {
@@ -1726,9 +1769,9 @@ function todoCardHTML(item) {
           ${noteBlock}${tagBlock}
         </div>
         <div class="card-actions">
-          <button class="cab" style="color:var(--amber)" onclick="toggleFav('${id}')"><span class="ca-ico">${item.fav?"★":"☆"}</span>Fav</button>
-          <button class="cab" style="color:var(--ac2)" onclick="openEdit('${id}')"><span class="ca-ico">✏️</span>Edit</button>
-          <button class="cab" style="color:var(--red)" onclick="askDelete('${id}')"><span class="ca-ico">🗑</span>Delete</button>
+          <button class="cab ca-fav" onclick="toggleFav('${id}')">${item.fav ? SVGS.starFilled : SVGS.starEmpty}<span class="cab-lbl">Fav</span></button>
+          <button class="cab ca-edit" onclick="openEdit('${id}')">${SVGS.edit}<span class="cab-lbl">Edit</span></button>
+          <button class="cab ca-del" onclick="askDelete('${id}')">${SVGS.trash}<span class="cab-lbl">Delete</span></button>
         </div>
       </div>
     </div>
@@ -1807,18 +1850,18 @@ function actionsHTML(item) {
   const id = item.id;
   let b = "";
   if (item.type==="password") {
-    b += cab("👤","User","ca-copy", `copyVal('${id}','username')`);
-    b += cab("🔑","Pass","ca-copy", `copyVal('${id}','password')`);
+    b += cab(SVGS.user, "User", "ca-copy", `copyVal('${id}','username')`);
+    b += cab(SVGS.key, "Pass", "ca-copy", `copyVal('${id}','password')`);
   }
-  if (item.url) b += cab("🌐","Open","ca-link", `openLink('${id}')`);
-  b += cab(item.fav?"★":"☆","Fav", "ca-fav",  `toggleFav('${id}')`);
-  b += cab("✏️","Edit","ca-edit", `openEdit('${id}')`);
-  b += cab("🗑","Delete","ca-del", `askDelete('${id}')`);
+  if (item.url) b += cab(SVGS.link, "Open", "ca-link", `openLink('${id}')`);
+  b += cab(item.fav ? SVGS.starFilled : SVGS.starEmpty, "Fav", "ca-fav", `toggleFav('${id}')`);
+  b += cab(SVGS.edit, "Edit", "ca-edit", `openEdit('${id}')`);
+  b += cab(SVGS.trash, "Delete", "ca-del", `askDelete('${id}')`);
   return b;
 }
 
-function cab(ico, label, cls, fn) {
-  return `<button class="cab ${cls}" onclick="${fn}"><span class="ca-ico">${ico}</span>${label}</button>`;
+function cab(svg, label, cls, fn) {
+  return `<button class="cab ${cls}" onclick="${fn}">${svg}<span class="cab-lbl">${label}</span></button>`;
 }
 
 function toggleCard(id) {
@@ -2822,16 +2865,41 @@ document.addEventListener("DOMContentLoaded", () => {
 let _tt;
 function toast(msg, type = "info") {
   const t = $("toast");
-  const textEl = $("toast-text");
-  const progressEl = $("toast-progress");
-  // Set context icon
-  const icons = { success: "✓", error: "✕", warn: "⚠", info: "ℹ" };
-  const ico = icons[type] || "";
-  if (textEl) textEl.textContent = ico ? `${ico} ${msg}` : msg;
-  else t.textContent = msg;
-  // Set context class
+  if (!t) return;
+
+  // Modern vector SVG icons for context-based status badges
+  const icons = {
+    success: `<svg class="toast-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+    error: `<svg class="toast-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    warn: `<svg class="toast-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    info: `<svg class="toast-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+  };
+  
+  const titleMap = {
+    success: "Success",
+    error: "Error",
+    warn: "Warning",
+    info: "Info"
+  };
+
+  const title = titleMap[type] || "Info";
+  const svg = icons[type] || "";
+
+  t.innerHTML = `
+    <div class="toast-icon-wrapper toast-icon-${type}">
+      ${svg}
+    </div>
+    <div class="toast-content">
+      <div class="toast-title toast-title-${type}">${title}</div>
+      <div class="toast-msg">${msg}</div>
+    </div>
+    <div id="toast-progress" style="width: 100%;"></div>
+  `;
+
+  // Apply visual trigger class
   t.className = `show toast-${type}`;
-  // Animate progress bar
+
+  const progressEl = $("toast-progress");
   if (progressEl) {
     progressEl.style.transition = 'none';
     progressEl.style.width = '100%';
@@ -2842,10 +2910,10 @@ function toast(msg, type = "info") {
       });
     });
   }
+
   clearTimeout(_tt);
   _tt = setTimeout(() => {
     t.className = '';
-    if (progressEl) progressEl.style.width = '100%';
   }, 2600);
 }
 

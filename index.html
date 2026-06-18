@@ -1036,6 +1036,60 @@
       animation: suggestFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
+    #search-suggestions.tags-only {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 12px;
+      max-height: 120px;
+    }
+
+    .suggest-tags-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .suggest-tag-pill {
+      display: inline-flex;
+      align-items: center;
+      background: var(--s3);
+      border: 1px solid var(--b2);
+      border-radius: 99px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tx);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .suggest-tag-pill:hover,
+    .suggest-tag-pill.active-highlight {
+      background: var(--acbg);
+      border-color: var(--ac);
+      color: var(--ac2);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(124, 106, 245, 0.15);
+    }
+
+    .suggest-tag-pill .pill-hash {
+      color: var(--muted);
+      margin-right: 1px;
+      font-weight: 500;
+    }
+
+    .suggest-tag-pill .pill-count {
+      font-size: 9px;
+      opacity: 0.6;
+      background: var(--bg);
+      padding: 1px 5px;
+      border-radius: 99px;
+      margin-left: 6px;
+    }
+
     @keyframes suggestFadeIn {
       from { opacity: 0; transform: translateY(-4px); }
       to { opacity: 1; transform: translateY(0); }
@@ -3693,8 +3747,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=53"></script>
-  <script src="app.js?v=53"></script>
+  <script src="config.js?v=54"></script>
+  <script src="app.js?v=54"></script>
 </body>
 
 </html>

@@ -1332,7 +1332,12 @@ function generateSuggestions(query) {
   STATE.focusedSuggestionIndex = -1;
   STATE.suggestions = [];
   
-  // We'll show suggestions if there's any active search text, or suggest general tags if empty
+  // Hide suggestions completely if suggest is disabled and search query is empty
+  if (!STATE.autoSuggest && !q) {
+    suggestEl.style.display = "none";
+    return;
+  }
+  
   const allItems = STATE.items.filter(i => !i.deleted);
   
   let matchingTags = [];
@@ -1340,9 +1345,10 @@ function generateSuggestions(query) {
   let matchingUsernames = [];
   let matchingNotes = [];
   
+  const cleanQ = q.startsWith("#") ? q.slice(1) : q;
+  
   if (q) {
-    // 1. Match Tags
-    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
+    // Match Tags
     const allTags = getAllTags();
     matchingTags = allTags
       .filter(t => t.toLowerCase().includes(cleanQ) && !STATE.activeTags.includes(t))
@@ -1350,22 +1356,20 @@ function generateSuggestions(query) {
         const count = allItems.filter(i => (i.tags || []).includes(t)).length;
         return { type: "tag", text: t, count };
       })
-      .slice(0, 5);
+      .slice(0, 8);
       
-    // 2. Match Titles (Suggest only)
+    // Match Titles, Usernames, Notes only if autoSuggest is enabled
     if (STATE.autoSuggest) {
       matchingTitles = allItems
         .filter(i => i.title && i.title.toLowerCase().includes(q))
         .slice(0, 5)
         .map(i => ({ type: "title", text: i.title, item: i }));
         
-      // 3. Match Usernames
       matchingUsernames = allItems
         .filter(i => i.username && i.username.toLowerCase().includes(q))
         .slice(0, 5)
         .map(i => ({ type: "username", text: i.username, item: i }));
         
-      // 4. Match Notes / Descriptions (Deep search only)
       if (STATE.deepSearch) {
         matchingNotes = allItems
           .filter(i => i.note && i.note.toLowerCase().includes(q))
@@ -1382,22 +1386,25 @@ function generateSuggestions(query) {
       }
     }
   } else {
-    // Show top tags when search is empty
-    const allTags = getAllTags();
-    matchingTags = allTags
-      .filter(t => !STATE.activeTags.includes(t))
-      .map(t => {
-        const count = allItems.filter(i => (i.tags || []).includes(t)).length;
-        return { type: "tag", text: t, count };
-      })
-      .slice(0, 8);
+    // Show top tags when search is empty ONLY if autoSuggest is enabled
+    if (STATE.autoSuggest) {
+      const allTags = getAllTags();
+      matchingTags = allTags
+        .filter(t => !STATE.activeTags.includes(t))
+        .map(t => {
+          const count = allItems.filter(i => (i.tags || []).includes(t)).length;
+          return { type: "tag", text: t, count };
+        })
+        .slice(0, 8);
+    }
   }
   
   // Combine suggestions
   STATE.suggestions = [...matchingTags, ...matchingTitles, ...matchingUsernames, ...matchingNotes];
   
   if (STATE.suggestions.length === 0) {
-    if (q) {
+    if (q && STATE.autoSuggest) {
+      suggestEl.classList.remove("tags-only");
       suggestEl.innerHTML = `<div class="suggest-empty">No suggestions found for "${esc(query)}"</div>`;
       suggestEl.style.display = "flex";
     } else {
@@ -1408,6 +1415,38 @@ function generateSuggestions(query) {
   
   // Render html
   let html = "";
+  
+  // If autoSuggest is disabled: Render ONLY tags in horizontal pill row format
+  if (!STATE.autoSuggest) {
+    suggestEl.classList.add("tags-only");
+    STATE.focusedSuggestionIndex = 0; // Highlight the first tag option
+    
+    html += `<div class="suggest-tags-row">`;
+    matchingTags.forEach((t, idx) => {
+      const name = t.text;
+      const matchIdx = name.toLowerCase().indexOf(cleanQ);
+      let renderedName = esc(name);
+      if (matchIdx >= 0 && cleanQ) {
+        renderedName = esc(name.slice(0, matchIdx)) + 
+                       `<mark class="match-highlight">${esc(name.slice(matchIdx, matchIdx + cleanQ.length))}</mark>` + 
+                       esc(name.slice(matchIdx + cleanQ.length));
+      }
+      const activeClass = idx === 0 ? "active-highlight" : "";
+      html += `
+        <span class="suggest-tag-pill ${activeClass}" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
+          <span class="pill-hash">#</span>${renderedName}
+          <span class="pill-count">${t.count}</span>
+        </span>
+      `;
+    });
+    html += `</div>`;
+    suggestEl.innerHTML = html;
+    suggestEl.style.display = "flex";
+    return;
+  }
+  
+  // Otherwise, standard suggestions dropdown (when suggest toggle is on)
+  suggestEl.classList.remove("tags-only");
   
   // Render tags group
   if (matchingTags.length > 0) {
@@ -1495,6 +1534,95 @@ function highlightMatch(text, query) {
 
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function onSearchKeyDown(e) {
+  const qEl = $("q");
+  if (!qEl) return;
+
+  const items = document.querySelectorAll(".suggestion-item, .suggest-tag-pill");
+  
+  // Tab, Enter, or Comma adds/selects tags
+  if (e.key === "," || e.key === "Tab" || e.key === "Enter") {
+    // If a suggestion pill/item is highlighted, select it
+    if (STATE.focusedSuggestionIndex >= 0 && STATE.focusedSuggestionIndex < items.length) {
+      e.preventDefault();
+      selectSuggestion(STATE.focusedSuggestionIndex);
+      return;
+    }
+
+    // Otherwise, convert the current input string into a tag filter directly
+    const val = qEl.value.trim();
+    if (val) {
+      e.preventDefault();
+      let tagText = val.startsWith("#") ? val.slice(1) : val;
+      if (tagText.endsWith(",")) tagText = tagText.slice(0, -1);
+      tagText = tagText.trim();
+
+      if (tagText) {
+        const allTags = getAllTags();
+        const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
+        const finalTag = matchedTag || tagText;
+
+        if (!STATE.activeTags.includes(finalTag)) {
+          STATE.activeTags.push(finalTag);
+          renderSelectedTags();
+          renderList();
+          toast(`Added tag filter: #${finalTag}`, "success");
+        }
+        qEl.value = "";
+        $("q-clear").style.display = "none";
+        generateSuggestions("");
+      }
+      return;
+    }
+  }
+
+  if (items.length === 0) return;
+
+  // Horizontal navigation for tags, vertical for list suggestions
+  if (!STATE.autoSuggest) {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex + 1) % items.length;
+      updateSuggestionHighlight(items);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex - 1 + items.length) % items.length;
+      updateSuggestionHighlight(items);
+    } else if (e.key === "Escape") {
+      const suggestEl = $("search-suggestions");
+      if (suggestEl) suggestEl.style.display = "none";
+      qEl.blur();
+    }
+  } else {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex + 1) % items.length;
+      updateSuggestionHighlight(items);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex - 1 + items.length) % items.length;
+      updateSuggestionHighlight(items);
+    } else if (e.key === "Escape") {
+      const suggestEl = $("search-suggestions");
+      if (suggestEl) suggestEl.style.display = "none";
+      qEl.blur();
+    }
+  }
+}
+
+function updateSuggestionHighlight(domItems) {
+  domItems.forEach((el, idx) => {
+    if (idx === STATE.focusedSuggestionIndex) {
+      el.classList.add("active");
+      el.classList.add("active-highlight");
+      el.scrollIntoView({ block: "nearest" });
+    } else {
+      el.classList.remove("active");
+      el.classList.remove("active-highlight");
+    }
+  });
 }
 
 function selectSuggestion(index) {

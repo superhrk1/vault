@@ -1019,22 +1019,23 @@
     }
 
     .tag-ac-chip {
-      padding: 4px 11px;
+      padding: 4px 12px;
       background: var(--s2);
-      border: 1px solid var(--b2);
-      border-radius: 99px;
+      border: 1px solid var(--b1);
+      border-radius: 8px;
       font-size: 11px;
-      font-weight: 700;
-      color: var(--ac2);
+      font-weight: 600;
+      color: var(--muted);
       cursor: pointer;
       white-space: nowrap;
-      transition: all .12s;
+      transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .tag-ac-chip:active,
     .tag-ac-chip:hover {
       background: var(--acbg);
       border-color: var(--ac);
+      color: var(--ac2);
     }
 
     .tag-ac-count {
@@ -1054,14 +1055,15 @@
     .stag {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 8px 3px 10px;
-      background: rgba(96, 165, 250, .12);
-      border: 1px solid rgba(96, 165, 250, .28);
-      border-radius: 99px;
+      gap: 5px;
+      padding: 4px 8px 4px 10px;
+      background: rgba(96, 165, 250, .08);
+      border: 1px solid rgba(96, 165, 250, .2);
+      border-radius: 8px;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--blue);
+      box-shadow: 0 2px 6px rgba(96, 165, 250, 0.05);
     }
 
     .stag-x {
@@ -3187,7 +3189,7 @@
     </div>
     <div class="sbox" style="max-width:180px">
       <span class="tag-sico">🏷️</span>
-      <input id="tag-q" class="sinp" placeholder="Tag…" oninput="onTagSearch(this)" autocomplete="off" style="padding-left:30px">
+      <input id="tag-q" class="sinp" placeholder="Tag…" oninput="onTagSearch(this)" autocomplete="off" style="padding-left:32px">
       <span id="tag-q-clear" onclick="clearTagSearch()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;cursor:pointer;color:var(--faint);display:none">✕</span>
     </div>
     <button class="fbtn" id="fav-btn" onclick="toggleFavFilter()">⭐ Fav</button>
@@ -3361,8 +3363,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=40"></script>
-  <script src="app.js?v=40"></script>
+  <script src="config.js?v=41"></script>
+  <script src="app.js?v=41"></script>
 </body>
 
 </html>

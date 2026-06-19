@@ -1037,11 +1037,23 @@
     }
 
     #search-suggestions.tags-only {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border: none;
+      border-top: 1px dashed var(--b1);
+      box-shadow: none;
+      max-height: none;
+      padding: 8px 0 2px 0;
+      margin-top: 8px;
+      z-index: 1;
       flex-direction: row;
       flex-wrap: wrap;
       gap: 6px;
-      padding: 10px 12px;
-      max-height: 120px;
     }
 
     .suggest-tags-row {
@@ -1208,6 +1220,19 @@
       font-weight: 600;
       color: var(--blue);
       box-shadow: 0 2px 6px rgba(96, 165, 250, 0.05);
+    }
+
+    .stag.type-pill {
+      background: rgba(124, 106, 245, .08);
+      border: 1px solid rgba(124, 106, 245, .2);
+      color: var(--ac2);
+    }
+
+    .stag.focused {
+      outline: 2px solid var(--ac);
+      outline-offset: 1px;
+      background: var(--acbg) !important;
+      color: var(--ac2) !important;
     }
 
     .stag-x {
@@ -3747,8 +3772,8 @@
   <!-- tag-overlay removed: replaced by inline autocomplete -->
 
   <!-- ─── SCRIPTS ────────────────────────────────────────── -->
-  <script src="config.js?v=58"></script>
-  <script src="app.js?v=58"></script>
+  <script src="config.js?v=61"></script>
+  <script src="app.js?v=61"></script>
 </body>
 
 </html>

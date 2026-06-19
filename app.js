@@ -103,10 +103,12 @@ let STATE = {
   masterKey        : null,
   items            : [],
   tab              : "dash",
+  typeFilter       : null,
   favOnly          : false,
   activeTags       : [],
   tagMatchStrategy : "and",       // and | or
   focusedSuggestionIndex: -1,
+  focusedActiveTagIndex: -1,
   suggestions      : [],
   deepSearch       : false,
   autoSuggest      : false,
@@ -1249,6 +1251,7 @@ function getItemAge(item) {
 
 const T_ICON  = { password:"🔑", bookmark:"🔖", note:"📝", todo:"✅" };
 const T_CLASS = { password:"ip", bookmark:"ib", note:"in", todo:"it" };
+const ITEM_TYPES = ["all", "password", "bookmark", "note", "todo"];
 
 const TODO_COLORS = [
   { name:"red",    hex:"#f87171" },
@@ -1277,6 +1280,8 @@ function toggleFavFilter() {
 
 function switchTab(el, t) {
   STATE.tab = t;
+  STATE.typeFilter = null;
+  STATE.focusedActiveTagIndex = -1;
   // Close any expanded items when switching tabs
   STATE.expandedId = null;
   STATE.pwVisible = {};
@@ -1321,16 +1326,17 @@ function onSearch(inp) {
     if (tagText) {
       const allTags = getAllTags();
       const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
-      const finalTag = matchedTag || tagText;
-      if (!STATE.activeTags.includes(finalTag)) {
-        STATE.activeTags.push(finalTag);
-        renderSelectedTags();
-        renderList();
-        toast(`Added tag filter: #${finalTag}`, "success");
+      if (matchedTag) {
+        if (!STATE.activeTags.includes(matchedTag)) {
+          STATE.activeTags.push(matchedTag);
+          renderSelectedTags();
+          renderList();
+          toast(`Added tag filter: #${matchedTag}`, "success");
+        }
+        inp.value = "";
+        $("q-clear").style.display = "none";
+        generateSuggestions("");
       }
-      inp.value = "";
-      $("q-clear").style.display = "none";
-      generateSuggestions("");
       return;
     }
   }
@@ -1343,12 +1349,18 @@ function onSearchFocus(inp) {
   generateSuggestions(inp.value);
 }
 
-// Close suggestions dropdown when clicking outside
+// Close suggestions dropdown when clicking outside and reset tag focus
 document.addEventListener("click", (e) => {
   const suggestEl = $("search-suggestions");
   const qEl = $("q");
   if (suggestEl && qEl && !suggestEl.contains(e.target) && e.target !== qEl) {
     suggestEl.style.display = "none";
+  }
+  if (qEl && e.target !== qEl && !document.getElementById("selected-tags")?.contains(e.target)) {
+    if (STATE.focusedActiveTagIndex !== -1) {
+      STATE.focusedActiveTagIndex = -1;
+      renderSelectedTags();
+    }
   }
 });
 
@@ -1374,10 +1386,16 @@ function generateSuggestions(query) {
   let matchingTitles = [];
   let matchingUsernames = [];
   let matchingNotes = [];
+  let matchingTypes = [];
   
   const cleanQ = q.startsWith("#") ? q.slice(1) : q;
   
   if (q) {
+    // Match Types
+    matchingTypes = ITEM_TYPES
+      .filter(t => t.includes(cleanQ))
+      .map(t => ({ type: "item-type", text: t }));
+
     // Match Tags
     const allTags = getAllTags();
     matchingTags = allTags
@@ -1418,6 +1436,7 @@ function generateSuggestions(query) {
   } else {
     // Show top tags when search is empty ONLY if autoSuggest is enabled
     if (STATE.autoSuggest) {
+      matchingTypes = ITEM_TYPES.map(t => ({ type: "item-type", text: t }));
       const allTags = getAllTags();
       matchingTags = allTags
         .filter(t => !STATE.activeTags.includes(t))
@@ -1430,7 +1449,7 @@ function generateSuggestions(query) {
   }
   
   // Combine suggestions
-  STATE.suggestions = [...matchingTags, ...matchingTitles, ...matchingUsernames, ...matchingNotes];
+  STATE.suggestions = [...matchingTypes, ...matchingTags, ...matchingTitles, ...matchingUsernames, ...matchingNotes];
   
   if (STATE.suggestions.length === 0) {
     if (q && STATE.autoSuggest) {
@@ -1446,28 +1465,41 @@ function generateSuggestions(query) {
   // Render html
   let html = "";
   
-  // If autoSuggest is disabled: Render ONLY tags in horizontal pill row format
+  // If autoSuggest is disabled: Render ONLY tags/types in horizontal pill row format
   if (!STATE.autoSuggest) {
     suggestEl.classList.add("tags-only");
-    STATE.focusedSuggestionIndex = 0; // Highlight the first tag option
+    STATE.focusedSuggestionIndex = 0; // Highlight the first option
     
     html += `<div class="suggest-tags-row">`;
-    matchingTags.forEach((t, idx) => {
-      const name = t.text;
-      const matchIdx = name.toLowerCase().indexOf(cleanQ);
+    STATE.suggestions.forEach((t, idx) => {
+      const isType = t.type === "item-type";
+      const name = isType ? `Type: ${t.text}` : t.text;
+      const matchText = isType ? t.text : name;
+      const matchIdx = matchText.toLowerCase().indexOf(cleanQ);
       let renderedName = esc(name);
       if (matchIdx >= 0 && cleanQ) {
-        renderedName = esc(name.slice(0, matchIdx)) + 
-                       `<mark class="match-highlight">${esc(name.slice(matchIdx, matchIdx + cleanQ.length))}</mark>` + 
-                       esc(name.slice(matchIdx + cleanQ.length));
+        const prefix = isType ? "Type: " : "";
+        const offset = prefix.length;
+        const actualMatchStart = matchIdx + offset;
+        renderedName = esc(name.slice(0, actualMatchStart)) + 
+                       `<mark class="match-highlight">${esc(name.slice(actualMatchStart, actualMatchStart + cleanQ.length))}</mark>` + 
+                       esc(name.slice(actualMatchStart + cleanQ.length));
       }
       const activeClass = idx === 0 ? "active-highlight" : "";
-      html += `
-        <span class="suggest-tag-pill ${activeClass}" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
-          <span class="pill-hash">#</span>${renderedName}
-          <span class="pill-count">${t.count}</span>
-        </span>
-      `;
+      if (isType) {
+        html += `
+          <span class="suggest-tag-pill type-pill ${activeClass}" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
+            <span class="pill-hash">⚙️</span>${renderedName}
+          </span>
+        `;
+      } else {
+        html += `
+          <span class="suggest-tag-pill ${activeClass}" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
+            <span class="pill-hash">#</span>${renderedName}
+            <span class="pill-count">${t.count}</span>
+          </span>
+        `;
+      }
     });
     html += `</div>`;
     suggestEl.innerHTML = html;
@@ -1477,6 +1509,25 @@ function generateSuggestions(query) {
   
   // Otherwise, standard suggestions dropdown (when suggest toggle is on)
   suggestEl.classList.remove("tags-only");
+  
+  // Render item types group
+  if (matchingTypes.length > 0) {
+    html += `<div class="suggest-group">
+      <div class="suggest-header">Item Types</div>`;
+    matchingTypes.forEach(t => {
+      const idx = STATE.suggestions.indexOf(t);
+      const icon = T_ICON[t.text] || "📁";
+      html += `
+        <div class="suggestion-item" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
+          <div class="suggest-left">
+            <span class="suggest-icon">${icon}</span>
+            <span class="suggest-text">${highlightMatch(t.text, q)}</span>
+            <span class="suggest-subtext">Filter by type</span>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
   
   // Render tags group
   if (matchingTags.length > 0) {
@@ -1565,13 +1616,82 @@ function highlightMatch(text, query) {
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
 function onSearchKeyDown(e) {
   const qEl = $("q");
   if (!qEl) return;
 
   const items = document.querySelectorAll(".suggestion-item, .suggest-tag-pill");
-  
+
+  // Build active items list for tag selection
+  const activeItems = [];
+  if (STATE.typeFilter) {
+    activeItems.push({ type: "type", value: STATE.typeFilter });
+  }
+  STATE.activeTags.forEach(t => {
+    activeItems.push({ type: "tag", value: t });
+  });
+
+  // Handle active tag focus and removal via Backspace / Left / Right Arrow keys
+  if (qEl.selectionStart === 0 && qEl.selectionEnd === 0) {
+    if (e.key === "Backspace") {
+      if (activeItems.length > 0) {
+        e.preventDefault();
+        if (STATE.focusedActiveTagIndex === -1) {
+          // Focus the last item
+          STATE.focusedActiveTagIndex = activeItems.length - 1;
+          renderSelectedTags();
+        } else {
+          // Delete the focused item
+          const item = activeItems[STATE.focusedActiveTagIndex];
+          if (item.type === "type") {
+            STATE.typeFilter = null;
+          } else {
+            STATE.activeTags = STATE.activeTags.filter(t => t !== item.value);
+          }
+          // Adjust focus index
+          const newLength = activeItems.length - 1;
+          if (newLength === 0) {
+            STATE.focusedActiveTagIndex = -1;
+          } else {
+            STATE.focusedActiveTagIndex = Math.min(newLength - 1, STATE.focusedActiveTagIndex);
+          }
+          renderSelectedTags();
+          renderList();
+        }
+        return;
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (activeItems.length > 0) {
+        e.preventDefault();
+        if (STATE.focusedActiveTagIndex === -1) {
+          STATE.focusedActiveTagIndex = activeItems.length - 1;
+        } else {
+          STATE.focusedActiveTagIndex = Math.max(0, STATE.focusedActiveTagIndex - 1);
+        }
+        renderSelectedTags();
+        return;
+      }
+    } else if (e.key === "ArrowRight") {
+      if (STATE.focusedActiveTagIndex !== -1) {
+        e.preventDefault();
+        STATE.focusedActiveTagIndex++;
+        if (STATE.focusedActiveTagIndex >= activeItems.length) {
+          STATE.focusedActiveTagIndex = -1;
+        }
+        renderSelectedTags();
+        return;
+      }
+    }
+  }
+
+  // Reset tag focus if they type or press other keys
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Backspace") {
+    if (STATE.focusedActiveTagIndex !== -1) {
+      STATE.focusedActiveTagIndex = -1;
+      renderSelectedTags();
+    }
+  }
+
   // Tab, Enter, or Comma adds/selects tags
   if (e.key === "," || e.key === "Tab" || e.key === "Enter") {
     // If a suggestion pill/item is highlighted, select it
@@ -1581,28 +1701,52 @@ function onSearchKeyDown(e) {
       return;
     }
 
-    // Otherwise, convert the current input string into a tag filter directly
+    // Otherwise, convert the current input string into a tag filter directly or switch tab if it matches an item type
     const val = qEl.value.trim();
     if (val) {
       e.preventDefault();
       let tagText = val.startsWith("#") ? val.slice(1) : val;
       if (tagText.endsWith(",")) tagText = tagText.slice(0, -1);
-      tagText = tagText.trim();
+      tagText = tagText.trim().toLowerCase();
 
-      if (tagText) {
-        const allTags = getAllTags();
-        const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
-        const finalTag = matchedTag || tagText;
-
-        if (!STATE.activeTags.includes(finalTag)) {
-          STATE.activeTags.push(finalTag);
+      if (ITEM_TYPES.includes(tagText)) {
+        if (STATE.tab === "all") {
+          STATE.typeFilter = tagText === "all" ? null : tagText;
           renderSelectedTags();
           renderList();
-          toast(`Added tag filter: #${finalTag}`, "success");
+          toast(tagText === "all" ? "Showing all item types" : `Filtering by type: ${tagText.toUpperCase()}`, "success");
+        } else {
+          const navEl = Array.from(document.querySelectorAll("#nav .nav-item")).find(el => {
+            return el.getAttribute("onclick")?.includes(`'${tagText}'`);
+          });
+          if (navEl) {
+            switchTab(navEl, tagText);
+            toast(`Switched tab to: ${tagText.toUpperCase()}`, "success");
+          }
         }
         qEl.value = "";
         $("q-clear").style.display = "none";
         generateSuggestions("");
+        return;
+      }
+
+      tagText = val.startsWith("#") ? val.slice(1) : val;
+      if (tagText.endsWith(",")) tagText = tagText.slice(0, -1);
+      tagText = tagText.trim();
+      if (tagText) {
+        const allTags = getAllTags();
+        const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
+        if (matchedTag) {
+          if (!STATE.activeTags.includes(matchedTag)) {
+            STATE.activeTags.push(matchedTag);
+            renderSelectedTags();
+            renderList();
+            toast(`Added tag filter: #${matchedTag}`, "success");
+          }
+          qEl.value = "";
+          $("q-clear").style.display = "none";
+          generateSuggestions("");
+        }
       }
       return;
     }
@@ -1672,6 +1816,20 @@ function selectSuggestion(index) {
       STATE.activeTags.push(item.text);
       renderSelectedTags();
       renderList();
+    }
+    if (qEl) {
+      qEl.value = "";
+      setTimeout(() => { qEl.value = ""; }, 0);
+    }
+    $("q-clear").style.display = "none";
+  } else if (item.type === "item-type") {
+    const t = item.text;
+    const navEl = Array.from(document.querySelectorAll("#nav .nav-item")).find(el => {
+      return el.getAttribute("onclick")?.includes(`'${t}'`);
+    });
+    if (navEl) {
+      switchTab(navEl, t);
+      toast(`Switched tab to: ${t.toUpperCase()}`, "success");
     }
     if (qEl) {
       qEl.value = "";
@@ -1757,6 +1915,7 @@ function filtered() {
   let r = STATE.items.filter(i => {
     if (i.deleted) return false;
     if (STATE.tab !== "all" && STATE.tab !== "dash" && i.type !== STATE.tab) return false;
+    if (STATE.tab === "all" && STATE.typeFilter && i.type !== STATE.typeFilter) return false;
     if (STATE.favOnly && !i.fav) return false;
     
     // Tag matching strategy (AND / OR)
@@ -3057,12 +3216,22 @@ function toast(msg, type = "info") {
 // ══════════════════════════════════════════════════════════
 function removeActiveTag(tag) {
   STATE.activeTags = STATE.activeTags.filter(t => t !== tag);
+  STATE.focusedActiveTagIndex = -1;
+  renderSelectedTags();
+  renderList();
+}
+
+function removeActiveType() {
+  STATE.typeFilter = null;
+  STATE.focusedActiveTagIndex = -1;
   renderSelectedTags();
   renderList();
 }
 
 function clearAllTags() {
   STATE.activeTags = [];
+  STATE.typeFilter = null;
+  STATE.focusedActiveTagIndex = -1;
   renderSelectedTags();
   renderList();
 }
@@ -3070,20 +3239,39 @@ function clearAllTags() {
 function renderSelectedTags() {
   const el = $("selected-tags");
   if (!el) return;
-  const n = STATE.activeTags.length;
+  
+  // Build active items list
+  const activeItems = [];
+  if (STATE.typeFilter) {
+    activeItems.push({ type: "type", value: STATE.typeFilter });
+  }
+  STATE.activeTags.forEach(t => {
+    activeItems.push({ type: "tag", value: t });
+  });
+
+  const n = activeItems.length;
   el.style.display = n ? "flex" : "none";
   
-  const strategyBtn = n >= 2 ? `
+  const strategyBtn = STATE.activeTags.length >= 2 ? `
     <div class="strategy-toggle" onclick="toggleTagMatchStrategy()" title="Click to change matching logic">
       Match: <span class="val">${STATE.tagMatchStrategy.toUpperCase()}</span>
     </div>
   ` : "";
   
-  el.innerHTML = STATE.activeTags.map(t =>
-    `<span class="stag">#${esc(t)}<span class="stag-x" onclick="removeActiveTag('${esc(t)}')">\u2715</span></span>`
-  ).join("") + 
-  (n > 1 ? `<span class="stag-clear" onclick="clearAllTags()">Clear all</span>` : "") + 
-  strategyBtn;
+  let html = "";
+  activeItems.forEach((item, idx) => {
+    const isFocused = idx === STATE.focusedActiveTagIndex;
+    const focusClass = isFocused ? " focused" : "";
+    if (item.type === "type") {
+      html += `<span class="stag type-pill${focusClass}">⚙️ ${esc(item.value)}<span class="stag-x" onclick="removeActiveType()">\u2715</span></span>`;
+    } else {
+      html += `<span class="stag${focusClass}">#${esc(item.value)}<span class="stag-x" onclick="removeActiveTag('${esc(item.value)}')">\u2715</span></span>`;
+    }
+  });
+
+  el.innerHTML = html + 
+    (n > 1 ? `<span class="stag-clear" onclick="clearAllTags()">Clear all</span>` : "") + 
+    strategyBtn;
 }
 
 // ══════════════════════════════════════════════════════════

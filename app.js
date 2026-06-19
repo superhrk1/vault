@@ -55,6 +55,61 @@ const LS = {
   del : k  => localStorage.removeItem(k),
 };
 
+// ── IDB wrapper (IndexedDB) ───────────────────────────────
+const IDB = {
+  dbName: "vault_db",
+  storeName: "store",
+  
+  _getDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(this.storeName);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+  
+  async get(key) {
+    try {
+      const db = await this._getDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(this.storeName, "readonly");
+        const store = transaction.objectStore(this.storeName);
+        const request = store.get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    } catch {
+      return null;
+    }
+  },
+  
+  async set(key, val) {
+    const db = await this._getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(this.storeName, "readwrite");
+      const store = transaction.objectStore(this.storeName);
+      const request = store.put(val, key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+  
+  async del(key) {
+    const db = await this._getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(this.storeName, "readwrite");
+      const store = transaction.objectStore(this.storeName);
+      const request = store.put(undefined, key); // or delete
+      const requestDel = store.delete(key);
+      requestDel.onsuccess = () => resolve(requestDel.result);
+      requestDel.onerror = () => reject(requestDel.error);
+    });
+  }
+};
+
 // ══════════════════════════════════════════════════════════
 //  CRYPTO  (AES-256-GCM + PBKDF2)
 // ══════════════════════════════════════════════════════════
@@ -125,6 +180,8 @@ let STATE = {
   mSubitems        : [],
   mColor           : "purple",
   mDashboard       : false,
+  currentFilteredList: [],
+  renderLimit      : 50,
   autoLockMin      : 5,
   drive: {
     token       : null,
@@ -140,13 +197,13 @@ let STATE = {
 // ══════════════════════════════════════════════════════════
 async function persistItems() {
   if (!STATE.masterKey) return;
-  if (!STATE.items.length) { LS.del("vault_data"); return; }
+  if (!STATE.items.length) { await IDB.del("vault_data"); return; }
   const blob = await Crypto.encrypt(STATE.items, STATE.masterKey);
-  LS.set("vault_data", blob);
+  await IDB.set("vault_data", blob);
 }
 
 async function loadItems() {
-  const blob = LS.get("vault_data");
+  const blob = await IDB.get("vault_data");
   if (!blob) { STATE.items = []; return; }
   try {
     STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
@@ -410,10 +467,21 @@ function openApp() {
           } else {
             setSyncStatus("error");
           }
-        });
       }
     };
     window.addEventListener("online", window._onlineSyncListener);
+  }
+  const listEl = $("list");
+  if (listEl && !window._listScrollListener) {
+    window._listScrollListener = () => {
+      if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 300) {
+        if (STATE.renderLimit < STATE.currentFilteredList.length) {
+          STATE.renderLimit += 50;
+          renderMoreListItems();
+        }
+      }
+    };
+    listEl.addEventListener("scroll", window._listScrollListener);
   }
   // Offer biometric registration if not already set up
   offerBioRegistration();
@@ -2219,7 +2287,20 @@ function renderList() {
     </div>`;
     return;
   }
-  area.innerHTML = list.map(cardHTML).join("");
+  
+  STATE.currentFilteredList = list;
+  STATE.renderLimit = 50;
+  
+  const itemsToRender = list.slice(0, STATE.renderLimit);
+  area.innerHTML = itemsToRender.map(cardHTML).join("");
+  area.scrollTop = 0;
+}
+
+function renderMoreListItems() {
+  const area = $("list");
+  if (!area) return;
+  const itemsToRender = STATE.currentFilteredList.slice(0, STATE.renderLimit);
+  area.innerHTML = itemsToRender.map(cardHTML).join("");
 }
 
 function renderAll() { renderList(); renderSelectedTags(); }

@@ -370,6 +370,21 @@ function lockVault() {
   _pin = ""; _pinConfirm = null;
   sessionStorage.removeItem("vault_session_key");
   stopAutoLock();
+  
+  // Clear search and suggestions state
+  const suggestEl = $("search-suggestions");
+  if (suggestEl) suggestEl.style.display = "none";
+  const qEl = $("q");
+  if (qEl) qEl.value = "";
+  const qClearEl = $("q-clear");
+  if (qClearEl) qClearEl.style.display = "none";
+  STATE.focusedSuggestionIndex = -1;
+  STATE.focusedSearchButtonIndex = -1;
+  STATE.focusedActiveTagIndex = -1;
+  STATE.activeTags = [];
+  STATE.typeFilter = null;
+  updateSearchButtonsHighlight();
+
   $("lock").classList.remove("gone"); setLockErr(""); renderPinDots();
   const btn = $("nk-submit"); if (btn) btn.classList.add("dim");
   const hasVault = !!LS.get("vault_hash");
@@ -1643,7 +1658,7 @@ function onSearchKeyDown(e) {
       e.preventDefault();
       STATE.focusedSearchButtonIndex--;
       if (STATE.focusedSearchButtonIndex === -1) {
-        qEl.focus();
+        if (document.activeElement !== qEl) qEl.focus();
       }
       updateSearchButtonsHighlight();
       return;
@@ -1662,12 +1677,12 @@ function onSearchKeyDown(e) {
       e.preventDefault();
       STATE.focusedSearchButtonIndex = -1;
       updateSearchButtonsHighlight();
-      qEl.focus();
+      if (document.activeElement !== qEl) qEl.focus();
       return;
     } else {
       STATE.focusedSearchButtonIndex = -1;
       updateSearchButtonsHighlight();
-      qEl.focus();
+      if (document.activeElement !== qEl) qEl.focus();
     }
   }
 
@@ -1741,7 +1756,7 @@ function onSearchKeyDown(e) {
       e.preventDefault();
       STATE.focusedSearchButtonIndex = 0;
       updateSearchButtonsHighlight();
-      qEl.blur();
+      if (document.activeElement !== qEl) qEl.focus();
       return;
     }
   }

@@ -1562,14 +1562,14 @@ function onSearch(inp) {
       const allTags = getAllTags();
       const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
       if (matchedTag) {
+        inp.value = "";
+        $("q-clear").style.display = "none";
         if (!STATE.activeTags.includes(matchedTag)) {
           STATE.activeTags.push(matchedTag);
           renderSelectedTags();
           renderList();
           toast(`Added tag filter: #${matchedTag}`, "success");
         }
-        inp.value = "";
-        $("q-clear").style.display = "none";
         generateSuggestions("");
       }
       return;
@@ -2004,6 +2004,8 @@ function onSearchKeyDown(e) {
       tagText = tagText.trim().toLowerCase();
 
       if (ITEM_TYPES.includes(tagText)) {
+        qEl.value = "";
+        $("q-clear").style.display = "none";
         if (STATE.tab === "all") {
           STATE.typeFilter = tagText === "all" ? null : tagText;
           renderSelectedTags();
@@ -2018,8 +2020,6 @@ function onSearchKeyDown(e) {
             toast(`Switched tab to: ${tagText.toUpperCase()}`, "success");
           }
         }
-        qEl.value = "";
-        $("q-clear").style.display = "none";
         generateSuggestions("");
         return;
       }
@@ -2031,14 +2031,14 @@ function onSearchKeyDown(e) {
         const allTags = getAllTags();
         const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
         if (matchedTag) {
+          qEl.value = "";
+          $("q-clear").style.display = "none";
           if (!STATE.activeTags.includes(matchedTag)) {
             STATE.activeTags.push(matchedTag);
             renderSelectedTags();
             renderList();
             toast(`Added tag filter: #${matchedTag}`, "success");
           }
-          qEl.value = "";
-          $("q-clear").style.display = "none";
           generateSuggestions("");
         }
       }
@@ -2119,18 +2119,24 @@ function selectSuggestion(index) {
   
   const qEl = $("q");
   if (item.type === "tag") {
+    if (qEl) {
+      qEl.value = "";
+    }
+    $("q-clear").style.display = "none";
     if (!STATE.activeTags.includes(item.text)) {
       STATE.activeTags.push(item.text);
       renderSelectedTags();
       renderList();
     }
     if (qEl) {
-      qEl.value = "";
       setTimeout(() => { qEl.value = ""; }, 0);
     }
-    $("q-clear").style.display = "none";
   } else if (item.type === "item-type") {
     const t = item.text;
+    if (qEl) {
+      qEl.value = "";
+    }
+    $("q-clear").style.display = "none";
     if (STATE.tab === "all") {
       STATE.typeFilter = t === "all" ? null : t;
       renderSelectedTags();
@@ -2146,10 +2152,8 @@ function selectSuggestion(index) {
       }
     }
     if (qEl) {
-      qEl.value = "";
       setTimeout(() => { qEl.value = ""; }, 0);
     }
-    $("q-clear").style.display = "none";
   } else if (item.type === "title") {
     if (qEl) qEl.value = item.text;
     $("q-clear").style.display = "block";
@@ -2249,6 +2253,17 @@ function filtered() {
       return (i.tags||[]).some(t => t.toLowerCase().includes(tagSearch));
     }
     
+    // Check if query matches the item type (singular or plural forms)
+    const typeQueryMap = {
+      "password": "password", "passwords": "password",
+      "bookmark": "bookmark", "bookmarks": "bookmark",
+      "note": "note", "notes": "note",
+      "todo": "todo", "todos": "todo"
+    };
+    if (typeQueryMap[q]) {
+      return i.type === typeQueryMap[q];
+    }
+
     const fieldsToSearch = STATE.deepSearch 
       ? [i.title, i.username, i.url, i.note] 
       : [i.title, i.username, i.url];

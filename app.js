@@ -302,11 +302,11 @@ async function setupVault(pw) {
   const hash = await Crypto.hashPassword(pw);
   LS.set("vault_hash", hash);
   STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
-  // Show secret question setup
   $("pin-entry").style.display = "none";
   $("lock-hint").style.display = "none";
   $("bio-section").classList.remove("show");
   $("forgot-link").style.display = "none";
+  const lh = $("lock-header"); if (lh) lh.style.display = "none";
   // Hide the glassmorphism card so it doesn't show empty
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("sq-setup").style.display = "flex";
@@ -385,6 +385,7 @@ function lockVault() {
   STATE.typeFilter = null;
   updateSearchButtonsHighlight();
 
+  const lh = $("lock-header"); if (lh) lh.style.display = "";
   $("lock").classList.remove("gone"); setLockErr(""); renderPinDots();
   const btn = $("nk-submit"); if (btn) btn.classList.add("dim");
   const hasVault = !!LS.get("vault_hash");
@@ -428,6 +429,7 @@ function applyLockout(until) {
   $("forgot-link").style.display = "none";
   $("sq-recovery").style.display = "none";
   $("bio-section").classList.remove("show");
+  const lh = $("lock-header"); if (lh) lh.style.display = "none";
   // Hide lock-card during lockout
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("lock-blocked").classList.add("show"); setLockErr("");
@@ -454,6 +456,7 @@ function endLockout() {
   $("lock-blocked").classList.remove("show");
   // Clear SQ inputs
   const lbAns = $("lb-sq-ans"); if (lbAns) lbAns.value = "";
+  const lh = $("lock-header"); if (lh) lh.style.display = "";
   // Re-show lock-card and PIN entry
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
   $("pin-entry").style.display = "flex"; $("lock-hint").style.display = "";
@@ -502,7 +505,8 @@ function showForgotPIN() {
   $("lock-hint").style.display = "none";
   $("forgot-link").style.display = "none";
   $("bio-section").classList.remove("show");
-  // Hide lock-card during recovery
+  const lh = $("lock-header"); if (lh) lh.style.display = "none";
+  // Hide the glassmorphism card during recovery
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = 'none';
   $("sq-rec-q").textContent = question;
   $("sq-rec-ans").value = "";
@@ -513,6 +517,7 @@ function showForgotPIN() {
 
 function backToPin() {
   $("sq-recovery").style.display = "none";
+  const lh = $("lock-header"); if (lh) lh.style.display = "";
   // Re-show lock-card
   const lc = document.querySelector('.lock-card'); if (lc) lc.style.display = '';
   $("pin-entry").style.display = "flex";

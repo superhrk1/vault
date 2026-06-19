@@ -1662,6 +1662,10 @@ function selectSuggestion(index) {
   const suggestEl = $("search-suggestions");
   if (suggestEl) suggestEl.style.display = "none";
   
+  // Clear suggestions state
+  STATE.focusedSuggestionIndex = -1;
+  STATE.suggestions = [];
+  
   const qEl = $("q");
   if (item.type === "tag") {
     if (!STATE.activeTags.includes(item.text)) {
@@ -1669,7 +1673,10 @@ function selectSuggestion(index) {
       renderSelectedTags();
       renderList();
     }
-    if (qEl) qEl.value = "";
+    if (qEl) {
+      qEl.value = "";
+      setTimeout(() => { qEl.value = ""; }, 0);
+    }
     $("q-clear").style.display = "none";
   } else if (item.type === "title") {
     if (qEl) qEl.value = item.text;
@@ -1705,40 +1712,7 @@ function toggleAutoSuggest() {
   toast(STATE.autoSuggest ? "Autocomplete suggestions enabled ✨" : "Autocomplete disabled (tags only)", "info");
 }
 
-function onSearchKeyDown(e) {
-  const items = document.querySelectorAll(".suggestion-item");
-  if (items.length === 0) return;
-  
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex + 1) % items.length;
-    updateSuggestionHighlight(items);
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex - 1 + items.length) % items.length;
-    updateSuggestionHighlight(items);
-  } else if (e.key === "Enter") {
-    if (STATE.focusedSuggestionIndex >= 0 && STATE.focusedSuggestionIndex < items.length) {
-      e.preventDefault();
-      selectSuggestion(STATE.focusedSuggestionIndex);
-    }
-  } else if (e.key === "Escape") {
-    const suggestEl = $("search-suggestions");
-    if (suggestEl) suggestEl.style.display = "none";
-    if (e.target) e.target.blur();
-  }
-}
 
-function updateSuggestionHighlight(domItems) {
-  domItems.forEach((el, idx) => {
-    if (idx === STATE.focusedSuggestionIndex) {
-      el.classList.add("active");
-      el.scrollIntoView({ block: "nearest" });
-    } else {
-      el.classList.remove("active");
-    }
-  });
-}
 
 function toggleTagMatchStrategy() {
   STATE.tagMatchStrategy = STATE.tagMatchStrategy === "and" ? "or" : "and";

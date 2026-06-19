@@ -1308,6 +1308,13 @@ function onSearch(inp) {
   
   // Mobile-safe comma listener: if input ends with a comma, commit it as a tag immediately
   if (inp.value && inp.value.endsWith(",")) {
+    // If we have matching suggestions, select the active highlighted tag pill
+    if (STATE.suggestions && STATE.suggestions.length > 0) {
+      const idx = STATE.focusedSuggestionIndex >= 0 ? STATE.focusedSuggestionIndex : 0;
+      selectSuggestion(idx);
+      return;
+    }
+    
     let tagText = inp.value.slice(0, -1).trim();
     if (tagText.startsWith("#")) tagText = tagText.slice(1);
     tagText = tagText.trim();

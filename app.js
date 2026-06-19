@@ -109,6 +109,7 @@ let STATE = {
   tagMatchStrategy : "and",       // and | or
   focusedSuggestionIndex: -1,
   focusedActiveTagIndex: -1,
+  focusedSearchButtonIndex: -1,
   suggestions      : [],
   deepSearch       : false,
   autoSuggest      : false,
@@ -1282,6 +1283,8 @@ function switchTab(el, t) {
   STATE.tab = t;
   STATE.typeFilter = null;
   STATE.focusedActiveTagIndex = -1;
+  STATE.focusedSearchButtonIndex = -1;
+  updateSearchButtonsHighlight();
   // Close any expanded items when switching tabs
   STATE.expandedId = null;
   STATE.pwVisible = {};
@@ -1349,17 +1352,29 @@ function onSearchFocus(inp) {
   generateSuggestions(inp.value);
 }
 
-// Close suggestions dropdown when clicking outside and reset tag focus
+// Close suggestions dropdown when clicking outside and reset tag/button focus
 document.addEventListener("click", (e) => {
   const suggestEl = $("search-suggestions");
   const qEl = $("q");
   if (suggestEl && qEl && !suggestEl.contains(e.target) && e.target !== qEl) {
     suggestEl.style.display = "none";
   }
-  if (qEl && e.target !== qEl && !document.getElementById("selected-tags")?.contains(e.target)) {
-    if (STATE.focusedActiveTagIndex !== -1) {
-      STATE.focusedActiveTagIndex = -1;
-      renderSelectedTags();
+  
+  const selectedTagsEl = document.getElementById("selected-tags");
+  const searchRowEl = document.getElementById("search-row");
+  
+  if (qEl && e.target !== qEl) {
+    if (selectedTagsEl && !selectedTagsEl.contains(e.target)) {
+      if (STATE.focusedActiveTagIndex !== -1) {
+        STATE.focusedActiveTagIndex = -1;
+        renderSelectedTags();
+      }
+    }
+    if (searchRowEl && !searchRowEl.contains(e.target)) {
+      if (STATE.focusedSearchButtonIndex !== -1) {
+        STATE.focusedSearchButtonIndex = -1;
+        updateSearchButtonsHighlight();
+      }
     }
   }
 });
@@ -1620,6 +1635,42 @@ function onSearchKeyDown(e) {
   const qEl = $("q");
   if (!qEl) return;
 
+  const SEARCH_BUTTONS = ["suggest-btn", "deep-btn", "fav-btn"];
+
+  // Handle active search buttons focus/action
+  if (STATE.focusedSearchButtonIndex !== -1) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      STATE.focusedSearchButtonIndex--;
+      if (STATE.focusedSearchButtonIndex === -1) {
+        qEl.focus();
+      }
+      updateSearchButtonsHighlight();
+      return;
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      STATE.focusedSearchButtonIndex = Math.min(SEARCH_BUTTONS.length - 1, STATE.focusedSearchButtonIndex + 1);
+      updateSearchButtonsHighlight();
+      return;
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const btnId = SEARCH_BUTTONS[STATE.focusedSearchButtonIndex];
+      const btn = $(btnId);
+      if (btn) btn.click();
+      return;
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      STATE.focusedSearchButtonIndex = -1;
+      updateSearchButtonsHighlight();
+      qEl.focus();
+      return;
+    } else {
+      STATE.focusedSearchButtonIndex = -1;
+      updateSearchButtonsHighlight();
+      qEl.focus();
+    }
+  }
+
   const items = document.querySelectorAll(".suggestion-item, .suggest-tag-pill");
 
   // Build active items list for tag selection
@@ -1681,6 +1732,17 @@ function onSearchKeyDown(e) {
         renderSelectedTags();
         return;
       }
+    }
+  }
+
+  // Handle focusing buttons from search input
+  if (qEl.selectionStart === qEl.value.length && qEl.selectionEnd === qEl.value.length) {
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      STATE.focusedSearchButtonIndex = 0;
+      updateSearchButtonsHighlight();
+      qEl.blur();
+      return;
     }
   }
 
@@ -1799,6 +1861,19 @@ function updateSuggestionHighlight(domItems) {
   });
 }
 
+function updateSearchButtonsHighlight() {
+  const SEARCH_BUTTONS = ["suggest-btn", "deep-btn", "fav-btn"];
+  SEARCH_BUTTONS.forEach((id, idx) => {
+    const btn = $(id);
+    if (!btn) return;
+    if (idx === STATE.focusedSearchButtonIndex) {
+      btn.classList.add("focused");
+    } else {
+      btn.classList.remove("focused");
+    }
+  });
+}
+
 function selectSuggestion(index) {
   const item = STATE.suggestions[index];
   if (!item) return;
@@ -1824,12 +1899,19 @@ function selectSuggestion(index) {
     $("q-clear").style.display = "none";
   } else if (item.type === "item-type") {
     const t = item.text;
-    const navEl = Array.from(document.querySelectorAll("#nav .nav-item")).find(el => {
-      return el.getAttribute("onclick")?.includes(`'${t}'`);
-    });
-    if (navEl) {
-      switchTab(navEl, t);
-      toast(`Switched tab to: ${t.toUpperCase()}`, "success");
+    if (STATE.tab === "all") {
+      STATE.typeFilter = t === "all" ? null : t;
+      renderSelectedTags();
+      renderList();
+      toast(t === "all" ? "Showing all item types" : `Filtering by type: ${t.toUpperCase()}`, "success");
+    } else {
+      const navEl = Array.from(document.querySelectorAll("#nav .nav-item")).find(el => {
+        return el.getAttribute("onclick")?.includes(`'${t}'`);
+      });
+      if (navEl) {
+        switchTab(navEl, t);
+        toast(`Switched tab to: ${t.toUpperCase()}`, "success");
+      }
     }
     if (qEl) {
       qEl.value = "";

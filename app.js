@@ -1822,11 +1822,12 @@ function renderAll() { renderList(); renderSelectedTags(); }
 
 function cardHTML(item) {
   if (item.type === "todo") return todoCardHTML(item);
+  const q = ($("q")?.value || "").toLowerCase().trim();
   const ico  = T_ICON[item.type]  || "📄";
   const cls  = T_CLASS[item.type] || "ip";
   const ccls = {password:"card-pw",bookmark:"card-bm",note:"card-nt"}[item.type] || "";
   const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
-  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
+  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${highlightMatch(t, q)}</span>`).join("");
   const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
   const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : item.priority === "medium" ? `<span class="bpill bpm">◉</span>` : item.priority === "low" ? `<span class="bpill bpl">▽</span>` : "";
   const exp  = STATE.expandedId === item.id;
@@ -1838,8 +1839,8 @@ function cardHTML(item) {
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci ${cls}">${ico}</div>
       <div class="cm">
-        <div class="ct">${esc(item.title||"Untitled")}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
-        <div class="cs">${esc(sub)}</div>
+        <div class="ct">${highlightMatch(item.title||"Untitled", q)}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
+        <div class="cs">${highlightMatch(sub, q)}</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
       <div class="chev">⌄</div>
@@ -1855,12 +1856,13 @@ function cardHTML(item) {
 
 // ── Todo Card ──────────────────────────────────────────
 function todoCardHTML(item) {
+  const q = ($("q")?.value || "").toLowerCase().trim();
   const subs = item.subitems || [];
   const done = subs.filter(s => s.done).length;
   const total = subs.length;
   const colorClass = item.color ? " color-" + item.color : "";
   const colorHex = (TODO_COLORS.find(c => c.name === item.color) || TODO_COLORS[6]).hex;
-  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${esc(t)}</span>`).join("");
+  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${highlightMatch(t, q)}</span>`).join("");
   const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
   const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
   const exp  = STATE.expandedId === item.id;
@@ -1871,12 +1873,12 @@ function todoCardHTML(item) {
     const d = s.done;
     return `<div class="todo-item sub">
       <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone('${id}','${s.id}')">${d?"✓":""}</div>
-      <div class="todo-text${d?" done-text":""}">${esc(s.text)}</div>
+      <div class="todo-text${d?" done-text":""}">${highlightMatch(s.text, q)}</div>
     </div>`;
   }).join("");
 
-  const noteBlock = item.note ? `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>` : "";
-  const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${esc(t)}</span>`).join("")}</div>` : "";
+  const noteBlock = item.note ? `<div class="note-block">${highlightMatch(item.note, q).replace(/\n/g,"<br>")}</div>` : "";
+  const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${highlightMatch(t, q)}</span>`).join("")}</div>` : "";
 
   const ago = getItemAge(item);
 
@@ -1884,7 +1886,7 @@ function todoCardHTML(item) {
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci it">✅</div>
       <div class="cm">
-        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${esc(item.title||"Untitled")}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
+        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${highlightMatch(item.title||"Untitled", q)}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
         <div class="cs">${done} of ${total} completed</div>
       </div>
       <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
@@ -1934,10 +1936,11 @@ function getFlagBadge(item) {
 }
 
 function detailHTML(item) {
+  const q = ($("q")?.value || "").toLowerCase().trim();
   const id = item.id;
   let h = "";
 
-  if (item.username) h += dRow("USER", esc(item.username), `copyVal('${id}','username')`);
+  if (item.username) h += dRow("USER", highlightMatch(item.username, q), `copyVal('${id}','username')`);
 
   if (item.password) {
     const vis = STATE.pwVisible[id];
@@ -1949,9 +1952,9 @@ function detailHTML(item) {
     </div>`;
   }
 
-  if (item.url)   h += dRow("URL",   `<span style="color:var(--blue)">${esc(item.url)}</span>`, `copyText('${esc(item.url)}')`);
-  if (item.email) h += dRow("EMAIL", esc(item.email), `copyText('${esc(item.email)}')`);
-  if (item.price) h += dRow("PRICE", esc(item.price));
+  if (item.url)   h += dRow("URL",   `<span style="color:var(--blue)">${highlightMatch(item.url, q)}</span>`, `copyText('${esc(item.url)}')`);
+  if (item.email) h += dRow("EMAIL", highlightMatch(item.email, q), `copyText('${esc(item.email)}')`);
+  if (item.price) h += dRow("PRICE", highlightMatch(item.price, q));
 
   if (item.renewal) {
     const days = Math.ceil((new Date(item.renewal) - new Date()) / 86400000);
@@ -1961,10 +1964,10 @@ function detailHTML(item) {
     h += `<div class="renewal ${cls}">${ico} Renews ${esc(item.renewal)} · ${msg}</div>`;
   }
 
-  if (item.note) h += `<div class="note-block">${esc(item.note).replace(/\n/g,"<br>")}</div>`;
+  if (item.note) h += `<div class="note-block">${highlightMatch(item.note, q).replace(/\n/g,"<br>")}</div>`;
 
   if ((item.tags||[]).length) {
-    h += `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${esc(t)}</span>`).join("")}</div>`;
+    h += `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${highlightMatch(t, q)}</span>`).join("")}</div>`;
   }
 
   return `<div class="di">${h}</div>`;

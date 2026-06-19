@@ -467,6 +467,7 @@ function openApp() {
           } else {
             setSyncStatus("error");
           }
+        });
       }
     };
     window.addEventListener("online", window._onlineSyncListener);

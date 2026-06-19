@@ -1305,6 +1305,29 @@ function switchTab(el, t) {
 
 function onSearch(inp) {
   $("q-clear").style.display = inp.value ? "block" : "none";
+  
+  // Mobile-safe comma listener: if input ends with a comma, commit it as a tag immediately
+  if (inp.value && inp.value.endsWith(",")) {
+    let tagText = inp.value.slice(0, -1).trim();
+    if (tagText.startsWith("#")) tagText = tagText.slice(1);
+    tagText = tagText.trim();
+    if (tagText) {
+      const allTags = getAllTags();
+      const matchedTag = allTags.find(t => t.toLowerCase() === tagText.toLowerCase());
+      const finalTag = matchedTag || tagText;
+      if (!STATE.activeTags.includes(finalTag)) {
+        STATE.activeTags.push(finalTag);
+        renderSelectedTags();
+        renderList();
+        toast(`Added tag filter: #${finalTag}`, "success");
+      }
+      inp.value = "";
+      $("q-clear").style.display = "none";
+      generateSuggestions("");
+      return;
+    }
+  }
+
   generateSuggestions(inp.value);
   debouncedRenderList();
 }

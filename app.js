@@ -186,20 +186,30 @@ async function boot() {
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   STATE.drive.status = configured ? (STATE.drive.token ? "synced" : "offline") : "noconfig";
   const hasVault = !!LS.get("vault_hash");
-  // Auto-unlock if session key exists (page refresh)
-  const sessionPin = sessionStorage.getItem("vault_session_key");
-  if (hasVault && sessionPin) {
+  // Auto-unlock if session key exists and within inactivity window (page refresh)
+  const sessionPin = LS.get("vault_session_key");
+  const lastActivity = parseInt(LS.get("vault_last_activity") || "0", 10);
+  const autolockMins = STATE.autoLockMin ?? 5;
+  const elapsedMins = lastActivity > 0 ? (Date.now() - lastActivity) / 60000 : Infinity;
+  const sessionValid = autolockMins === 0 || elapsedMins < autolockMins;
+
+  if (hasVault && sessionPin && sessionValid) {
     try {
       const ok = await Crypto.verifyPassword(sessionPin, LS.get("vault_hash"));
       if (ok) {
         STATE.masterKey = sessionPin;
+        LS.set("vault_last_activity", Date.now().toString());
         await loadItems();
         renderSyncBadge();
         openApp();
         return;
       }
     } catch(e) {}
-    sessionStorage.removeItem("vault_session_key");
+    LS.del("vault_session_key");
+    LS.del("vault_last_activity");
+  } else {
+    LS.del("vault_session_key");
+    LS.del("vault_last_activity");
   }
   if (!hasVault) {
     $("pin-label").textContent = "Create a PIN";
@@ -292,7 +302,8 @@ async function handlePinSubmit() {
     _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
   }
   clearFailCount(); STATE.masterKey = _pin;
-  sessionStorage.setItem("vault_session_key", _pin);
+  LS.set("vault_session_key", _pin);
+  LS.set("vault_last_activity", Date.now().toString());
   _pin = "";
   await loadItems(); openApp();
 }
@@ -302,6 +313,8 @@ async function setupVault(pw) {
   const hash = await Crypto.hashPassword(pw);
   LS.set("vault_hash", hash);
   STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
+  LS.set("vault_session_key", pw);
+  LS.set("vault_last_activity", Date.now().toString());
   $("pin-entry").style.display = "none";
   $("lock-hint").style.display = "none";
   $("bio-section").classList.remove("show");
@@ -368,7 +381,8 @@ function lockVault() {
   toggleSettings(false);
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
-  sessionStorage.removeItem("vault_session_key");
+  LS.del("vault_session_key");
+  LS.del("vault_last_activity");
   stopAutoLock();
   
   // Clear search and suggestions state
@@ -799,6 +813,61 @@ async function autoBiometricUnlock() {
     setTimeout(() => {
       biometricUnlock();
     }, 350);
+  }
+}
+
+async function renderBioSettings() {
+  const sec = $("bio-settings-sec");
+  if (!sec) return;
+
+  const isAvailable = await isBioAvailable();
+  const bioToggle = $("bio-toggle");
+  const bioDesc = $("bio-status-desc");
+
+  if (!isAvailable) {
+    bioToggle.classList.remove("on");
+    bioToggle.style.opacity = "0.5";
+    bioToggle.style.pointerEvents = "none";
+    bioDesc.textContent = "Biometrics not supported or available on this device";
+    return;
+  }
+
+  bioToggle.style.opacity = "";
+  bioToggle.style.pointerEvents = "";
+  const hasCred = !!LS.get("vault_bio_cred");
+  if (hasCred) {
+    bioToggle.classList.add("on");
+    bioDesc.textContent = "Biometric unlock is enabled and ready";
+  } else {
+    bioToggle.classList.remove("on");
+    bioDesc.textContent = "Touch to set up biometric fingerprint unlock";
+  }
+}
+
+async function toggleBiometricSetting() {
+  const isAvailable = await isBioAvailable();
+  if (!isAvailable) {
+    toast("Biometrics not available on this device", "error");
+    return;
+  }
+
+  const hasCred = !!LS.get("vault_bio_cred");
+  if (hasCred) {
+    if (confirm("Disable biometric fingerprint unlock?")) {
+      LS.del("vault_bio_cred");
+      LS.del("vault_bio_nonce");
+      LS.del("vault_bio_enc");
+      toast("Biometric unlock disabled", "info");
+      renderBioSettings();
+    }
+  } else {
+    if (!STATE.masterKey) {
+      toast("Unlock vault first to register biometrics", "error");
+      return;
+    }
+    toast("Please authenticate to register biometric unlock...", "info");
+    await registerBiometric(STATE.masterKey);
+    renderBioSettings();
   }
 }
 
@@ -2954,6 +3023,7 @@ function stopAutoLock() {
 function resetAutoLock() {
   if (!STATE.masterKey) return;
   _autoLockStart = Date.now();
+  LS.set("vault_last_activity", _autoLockStart.toString());
   const bar = $("autolock-bar");
   if (bar) bar.classList.remove('urgent');
 }
@@ -3232,6 +3302,7 @@ function toggleSettings(show) {
     updateStats();
     renderDrivePanel();
     renderSQSettings();
+    renderBioSettings();
   } else {
     if (s) s.classList.remove("show");
     if (b) b.classList.remove("show");

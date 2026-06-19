@@ -325,10 +325,10 @@ function numpadPress(digit) {
 function numpadBack() {
   if (!_pin.length) return;
   vibrate(15);
-  _pin = _pin.slice(0, -1);
+  _pin = "";
   renderPinDots();
   const btn = $("nk-submit");
-  if (btn) btn.classList.toggle("dim", _pin.length < 4);
+  if (btn) btn.classList.add("dim");
 }
 
 function renderPinDots() {

@@ -1319,12 +1319,12 @@ async function pullFromDrive() {
       const existingIdx = STATE.items.findIndex(i => i.id === item.id);
       if (existingIdx === -1) { 
         STATE.items.push(item); 
-        added++; 
+        if (!item.deleted) added++; 
       } else {
         const existing = STATE.items[existingIdx];
         if ((item.updated || 0) > (existing.updated || 0)) {
           STATE.items[existingIdx] = item;
-          updated++;
+          if (!item.deleted) updated++;
         }
       }
     }

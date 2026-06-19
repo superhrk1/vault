@@ -186,7 +186,22 @@ async function boot() {
   STATE.autoLockMin    = LS.get("vault_autolock") ?? 5;
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
-  STATE.drive.status = configured ? (STATE.drive.token ? "synced" : "offline") : "noconfig";
+
+  const isConnected = LS.get("drive_connected") === "true";
+  const expired = isTokenExpired();
+  if (configured) {
+    if (isConnected) {
+      if (!navigator.onLine) {
+        STATE.drive.status = "offline";
+      } else {
+        STATE.drive.status = (STATE.drive.token && !expired) ? "synced" : "error";
+      }
+    } else {
+      STATE.drive.status = "offline";
+    }
+  } else {
+    STATE.drive.status = "noconfig";
+  }
   const hasVault = !!LS.get("vault_hash");
   // Auto-unlock if session key exists and within inactivity window (page refresh)
   const sessionPin = LS.get("vault_session_key");
@@ -345,6 +360,25 @@ function openApp() {
     }, 400);
   } else if (STATE.drive.token) {
     setTimeout(() => pullFromDrive(), 400);
+  } else if (LS.get("drive_connected") === "true") {
+    if (!navigator.onLine) {
+      setSyncStatus("offline");
+    } else {
+      // Drive is connected, but token is missing or expired.
+      // Try to silently refresh the token.
+      setTimeout(() => {
+        console.log("[Vault] Re-checking Google Drive connection...");
+        setSyncStatus("syncing");
+        silentTokenRefresh().then(refreshed => {
+          if (refreshed) {
+            pullFromDrive();
+          } else {
+            setSyncStatus("error");
+            toast("Drive session expired — click sync badge to reconnect", "warn");
+          }
+        });
+      }, 400);
+    }
   } else if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
     $("drive-banner").classList.add("show");
     $("db-msg").textContent = configured
@@ -366,6 +400,16 @@ function openApp() {
       if (STATE.drive.token && STATE.masterKey) {
         pullFromDrive().then(success => {
           if (success) triggerSync();
+        });
+      } else if (LS.get("drive_connected") === "true" && STATE.masterKey) {
+        console.log("[Vault] Network restored, re-checking Google Drive connection...");
+        setSyncStatus("syncing");
+        silentTokenRefresh().then(refreshed => {
+          if (refreshed) {
+            pullFromDrive();
+          } else {
+            setSyncStatus("error");
+          }
         });
       }
     };
@@ -884,6 +928,7 @@ function handleOAuthCallback() {
   if (!token) return;
   STATE.drive.token = token;
   LS.set("drive_token", token);
+  LS.set("drive_connected", "true");
   // Store token expiry (Google sends expires_in in seconds, default 3600)
   const expiresIn = parseInt(params.get("expires_in") || "3600", 10);
   const expiry = Date.now() + expiresIn * 1000;
@@ -948,6 +993,7 @@ function silentTokenRefresh() {
         if (e.data.token) {
           STATE.drive.token = e.data.token;
           LS.set("drive_token", e.data.token);
+          LS.set("drive_connected", "true");
           const expiry = Date.now() + (e.data.expiresIn || 3600) * 1000;
           STATE.drive.tokenExpiry = expiry;
           LS.set("drive_token_expiry", expiry);
@@ -979,6 +1025,7 @@ function silentTokenRefresh() {
             cleanup();
             STATE.drive.token = token;
             LS.set("drive_token", token);
+            LS.set("drive_connected", "true");
             const expiresIn = parseInt(iParams.get("expires_in") || "3600", 10);
             const expiry = Date.now() + expiresIn * 1000;
             STATE.drive.tokenExpiry = expiry;
@@ -1032,6 +1079,7 @@ function disconnectDrive() {
   STATE.drive.status      = "offline";
   LS.del("drive_token");
   LS.del("drive_token_expiry");
+  LS.del("drive_connected");
   LS.del("drive_file_id");
   LS.del("drive_last_sync");
   renderDrivePanel();
@@ -1246,6 +1294,24 @@ function renderSyncBadge() {
   label.textContent = map[s] || s;
 }
 
+function handleSyncBadgeClick() {
+  if (!navigator.onLine) {
+    toast("No internet connection", "info");
+    return;
+  }
+  const s = STATE.drive.status;
+  if (s === "error" || (LS.get("drive_connected") === "true" && !STATE.drive.token)) {
+    connectDrive();
+  } else if (s === "offline") {
+    toggleSettings(true);
+    setTimeout(() => {
+      $("drive-panel")?.scrollIntoView({ behavior: "smooth" });
+    }, 200);
+  } else if (STATE.drive.token) {
+    triggerSync();
+  }
+}
+
 function renderDrivePanel() {
   const panel = $("drive-panel");
   if (!panel) return;
@@ -1264,6 +1330,12 @@ function renderDrivePanel() {
         `<span class="dr-act sync" onclick="triggerSync()">Sync Now</span>`) +
       driveRow("⬇️","Pull from Drive","Merge cloud backup into local vault",
         `<span class="dr-act pull" onclick="pullFromDrive()">Pull</span>`) +
+      driveRow("🔌","Disconnect","Remove Drive access",
+        `<span class="dr-act disc" onclick="disconnectDrive()">Remove</span>`);
+  } else if (LS.get("drive_connected") === "true") {
+    panel.innerHTML =
+      driveRow("⚠️","Session Expired","Please reconnect to resume syncing",
+        `<span class="dr-act connect" onclick="connectDrive()">Reconnect</span>`) +
       driveRow("🔌","Disconnect","Remove Drive access",
         `<span class="dr-act disc" onclick="disconnectDrive()">Remove</span>`);
   } else {

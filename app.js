@@ -117,6 +117,8 @@ let STATE = {
   expandedId       : null,
   pwVisible        : {},
   editId           : null,
+  focusedFormTagIndex: -1,
+  focusedMTagIndex : -1,
   mTags            : [],
   mType            : "password",
   mPriority        : "high",
@@ -2408,6 +2410,8 @@ async function toggleFav(id) {
 function openAdd() {
   STATE.editId    = null;
   STATE.mTags     = [];
+  STATE.focusedFormTagIndex = -1;
+  STATE.focusedMTagIndex = -1;
   // Auto-detect type from current tab
   const tabType = ["password","bookmark","note","todo"].includes(STATE.tab) ? STATE.tab : "password";
   STATE.mType     = tabType;
@@ -2425,6 +2429,8 @@ function openEdit(id) {
   if (!item) return;
   STATE.editId    = id;
   STATE.mTags     = [...(item.tags||[])];
+  STATE.focusedFormTagIndex = -1;
+  STATE.focusedMTagIndex = -1;
   STATE.mType     = item.type;
   STATE.mPriority = item.priority || "normal";
   STATE.mSubitems = (item.subitems||[]).map(s => ({...s}));
@@ -2521,7 +2527,7 @@ function buildForm(type, pre) {
     <div class="fg">
       <div class="fl">Tags</div>
       <div class="tag-add-row">
-        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag()}" oninput="onFormTagInput(this)" autocomplete="off">
+        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="onFormTagKeyDown(event, this)" oninput="onFormTagInput(this)" autocomplete="off">
         <button class="tadd-btn" onclick="addTag()">+ Add</button>
       </div>
       <div id="form-tag-autocomplete" class="chips" style="display:none; margin-top:8px;"></div>
@@ -2639,14 +2645,23 @@ function onFormTagInput(inp) {
   const q = inp.value.trim().toLowerCase();
   const dropdown = $("form-tag-autocomplete");
   if (!dropdown) return;
-  if (!q) { dropdown.style.display = "none"; return; }
+  if (!q) { 
+    dropdown.style.display = "none"; 
+    STATE.focusedFormTagIndex = -1;
+    return; 
+  }
   const matches = getAllTags()
     .filter(t => t.toLowerCase().includes(q) && !STATE.mTags.includes(t))
     .slice(0, 10);
-  if (!matches.length) { dropdown.style.display = "none"; return; }
+  if (!matches.length) { 
+    dropdown.style.display = "none"; 
+    STATE.focusedFormTagIndex = -1;
+    return; 
+  }
   dropdown.style.display = "flex";
-  dropdown.innerHTML = matches.map(t => {
-    return `<span class="tag-ac-chip" onclick="selectFormTag('${esc(t)}')">#${esc(t)}</span>`;
+  dropdown.innerHTML = matches.map((t, idx) => {
+    const activeClass = idx === STATE.focusedFormTagIndex ? " active-highlight" : "";
+    return `<span class="suggest-tag-pill${activeClass}" onclick="selectFormTag('${esc(t)}')" id="form-suggest-item-${idx}"><span class="pill-hash">#</span>${esc(t)}</span>`;
   }).join("");
 }
 
@@ -2659,12 +2674,129 @@ function selectFormTag(tag) {
   if (inp) inp.value = "";
   const dropdown = $("form-tag-autocomplete");
   if (dropdown) dropdown.style.display = "none";
+  STATE.focusedFormTagIndex = -1;
+}
+
+function updateFormTagHighlight(matchesLength) {
+  for (let idx = 0; idx < matchesLength; idx++) {
+    const el = $(`form-suggest-item-${idx}`);
+    if (el) {
+      if (idx === STATE.focusedFormTagIndex) {
+        el.classList.add("active-highlight");
+        el.scrollIntoView({ block: "nearest" });
+      } else {
+        el.classList.remove("active-highlight");
+      }
+    }
+  }
+}
+
+function onFormTagKeyDown(e, inp) {
+  const dropdown = $("form-tag-autocomplete");
+  const matches = !dropdown || dropdown.style.display === "none" ? [] : getAllTags()
+    .filter(t => t.toLowerCase().includes(inp.value.trim().toLowerCase()) && !STATE.mTags.includes(t))
+    .slice(0, 10);
+
+  if (matches.length > 0) {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      STATE.focusedFormTagIndex = (STATE.focusedFormTagIndex + 1) % matches.length;
+      updateFormTagHighlight(matches.length);
+      return;
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      STATE.focusedFormTagIndex = (STATE.focusedFormTagIndex - 1 + matches.length) % matches.length;
+      updateFormTagHighlight(matches.length);
+      return;
+    } else if (e.key === "Enter" || e.key === "Tab" || e.key === ",") {
+      if (STATE.focusedFormTagIndex >= 0 && STATE.focusedFormTagIndex < matches.length) {
+        e.preventDefault();
+        selectFormTag(matches[STATE.focusedFormTagIndex]);
+        return;
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      dropdown.style.display = "none";
+      STATE.focusedFormTagIndex = -1;
+      return;
+    }
+  }
+
+  if (inp.selectionStart === 0 && inp.selectionEnd === 0) {
+    if (e.key === "Backspace") {
+      if (STATE.mTags.length > 0) {
+        e.preventDefault();
+        if (STATE.focusedMTagIndex === -1) {
+          STATE.focusedMTagIndex = STATE.mTags.length - 1;
+          refreshChips();
+        } else {
+          const tagToRemove = STATE.mTags[STATE.focusedMTagIndex];
+          STATE.mTags = STATE.mTags.filter(t => t !== tagToRemove);
+          const newLength = STATE.mTags.length;
+          if (newLength === 0) {
+            STATE.focusedMTagIndex = -1;
+          } else {
+            STATE.focusedMTagIndex = Math.min(newLength - 1, STATE.focusedMTagIndex);
+          }
+          refreshChips();
+        }
+        return;
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (STATE.mTags.length > 0) {
+        e.preventDefault();
+        if (STATE.focusedMTagIndex === -1) {
+          STATE.focusedMTagIndex = STATE.mTags.length - 1;
+        } else {
+          STATE.focusedMTagIndex = Math.max(0, STATE.focusedMTagIndex - 1);
+        }
+        refreshChips();
+        return;
+      }
+    } else if (e.key === "ArrowRight") {
+      if (STATE.focusedMTagIndex !== -1) {
+        e.preventDefault();
+        STATE.focusedMTagIndex++;
+        if (STATE.focusedMTagIndex >= STATE.mTags.length) {
+          STATE.focusedMTagIndex = -1;
+        }
+        refreshChips();
+        return;
+      }
+    }
+  }
+
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Backspace") {
+    if (STATE.focusedMTagIndex !== -1) {
+      STATE.focusedMTagIndex = -1;
+      refreshChips();
+    }
+  }
+
+  if (e.key === "Enter" || e.key === "Tab" || e.key === ",") {
+    const val = inp.value.trim().toLowerCase().replace(/\s+/g,"-");
+    if (val) {
+      e.preventDefault();
+      let tagText = val.startsWith("#") ? val.slice(1) : val;
+      if (tagText.endsWith(",")) tagText = tagText.slice(0, -1);
+      tagText = tagText.trim();
+      if (tagText && !STATE.mTags.includes(tagText)) {
+        STATE.mTags.push(tagText);
+        refreshChips();
+      }
+      inp.value = "";
+      if (dropdown) dropdown.style.display = "none";
+      STATE.focusedFormTagIndex = -1;
+    }
+  }
 }
 function removeTag(t) { STATE.mTags = STATE.mTags.filter(v => v !== t); refreshChips(); }
 function renderChips() {
-  return STATE.mTags.map(t =>
-    `<div class="chip">#${esc(t)}<span class="chip-x" onclick="removeTag('${esc(t)}')">✕</span></div>`
-  ).join("");
+  return STATE.mTags.map((t, idx) => {
+    const isFocused = idx === STATE.focusedMTagIndex;
+    const focusClass = isFocused ? " focused" : "";
+    return `<div class="chip${focusClass}">#${esc(t)}<span class="chip-x" onclick="removeTag('${esc(t)}')">✕</span></div>`;
+  }).join("");
 }
 function refreshChips() { const el = $("mchips"); if (el) el.innerHTML = renderChips(); }
 

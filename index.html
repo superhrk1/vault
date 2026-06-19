@@ -3442,6 +3442,77 @@
     .dd-act { flex:1; padding:8px; border:1px solid var(--b1); border-radius:8px; background:var(--s3); font-size:11px; font-weight:700; cursor:pointer; font-family:var(--sans); transition:all .15s; text-align:center; }
     .dd-act:hover { background:var(--s1); border-color:var(--b2); }
     .dd-act:active { transform:scale(.96); }
+
+    /* Mobile UX Enhancements for Search, Filter buttons and Tag results */
+    @media (max-width: 600px) {
+      #search-row {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+      }
+      .sbox-container {
+        flex: 1 1 100%;
+        width: 100%;
+      }
+      .sinp {
+        padding: 11px 32px 11px 32px;
+        font-size: 14px;
+        border-radius: 10px;
+      }
+      .sico {
+        font-size: 15px;
+        left: 11px;
+      }
+      #q-clear {
+        font-size: 14px;
+        right: 11px;
+      }
+      .fbtn {
+        flex: 1;
+        height: 38px;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        padding: 0 8px;
+      }
+      #tag-filter-row {
+        padding: 0 12px 10px;
+      }
+      #selected-tags {
+        gap: 8px;
+        padding: 4px 0;
+      }
+      .stag {
+        padding: 6px 12px 6px 12px;
+        font-size: 12px;
+        border-radius: 20px;
+        gap: 6px;
+      }
+      .stag-x {
+        font-size: 13px;
+        padding: 2px 4px;
+        margin-left: 2px;
+      }
+      .stag-clear {
+        font-size: 12px;
+        padding: 6px 10px;
+        margin-top: 4px;
+      }
+      #search-suggestions {
+        max-height: 280px;
+        border-radius: 12px;
+      }
+      .suggestion-item {
+        padding: 11px 14px;
+        font-size: 14px;
+      }
+      .suggest-tag-pill {
+        padding: 7px 13px;
+        font-size: 12px;
+      }
+    }
 </style>
 </head>
 
@@ -3645,6 +3716,23 @@
       <div id="sq-settings-panel"></div>
     </div>
 
+    <!-- Biometrics settings option -->
+    <div class="set-sec" id="bio-settings-sec">
+      <div class="set-lbl">Biometrics</div>
+      <div class="dash-toggle-row">
+        <div class="dash-toggle-info">
+          <span style="font-size:18px">🛡️</span>
+          <div>
+            <div style="font-size:12px; font-weight:600; color:var(--tx)">Fingerprint / Biometric Lock</div>
+            <div style="font-size:10px; color:var(--faint)" id="bio-status-desc">Use biometric authenticator to unlock the vault</div>
+          </div>
+        </div>
+        <div id="bio-toggle" class="dash-switch" onclick="toggleBiometricSetting()">
+          <div class="dash-switch-knob"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="set-sec">
       <div class="set-lbl">Auto-Lock Timer</div>
       <div class="autolock-pills" id="autolock-pills">
@@ -3795,8 +3883,8 @@
     </div>
   </div>
 
-  <script src="config.js?v=70"></script>
-  <script src="app.js?v=70"></script>
+  <script src="config.js?v=71"></script>
+  <script src="app.js?v=71"></script>
 </body>
 
 </html>

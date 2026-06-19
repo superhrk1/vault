@@ -1640,7 +1640,7 @@ function generateSuggestions(query) {
   if (q) {
     // Match Types
     matchingTypes = ITEM_TYPES
-      .filter(t => t.includes(cleanQ))
+      .filter(t => t.includes(cleanQ) && t !== STATE.tab && t !== STATE.typeFilter)
       .map(t => ({ type: "item-type", text: t }));
 
     // Match Tags
@@ -1683,7 +1683,9 @@ function generateSuggestions(query) {
   } else {
     // Show top tags when search is empty ONLY if autoSuggest is enabled
     if (STATE.autoSuggest) {
-      matchingTypes = ITEM_TYPES.map(t => ({ type: "item-type", text: t }));
+      matchingTypes = ITEM_TYPES
+        .filter(t => t !== STATE.tab && t !== STATE.typeFilter)
+        .map(t => ({ type: "item-type", text: t }));
       const allTags = getAllTags();
       matchingTags = allTags
         .filter(t => !STATE.activeTags.includes(t))
@@ -2121,6 +2123,7 @@ function selectSuggestion(index) {
   if (item.type === "tag") {
     if (qEl) {
       qEl.value = "";
+      qEl.focus();
     }
     $("q-clear").style.display = "none";
     if (!STATE.activeTags.includes(item.text)) {
@@ -2129,12 +2132,13 @@ function selectSuggestion(index) {
       renderList();
     }
     if (qEl) {
-      setTimeout(() => { qEl.value = ""; }, 0);
+      setTimeout(() => { qEl.value = ""; qEl.focus(); }, 0);
     }
   } else if (item.type === "item-type") {
     const t = item.text;
     if (qEl) {
       qEl.value = "";
+      qEl.focus();
     }
     $("q-clear").style.display = "none";
     if (STATE.tab === "all") {
@@ -2152,18 +2156,27 @@ function selectSuggestion(index) {
       }
     }
     if (qEl) {
-      setTimeout(() => { qEl.value = ""; }, 0);
+      setTimeout(() => { qEl.value = ""; qEl.focus(); }, 0);
     }
   } else if (item.type === "title") {
-    if (qEl) qEl.value = item.text;
+    if (qEl) {
+      qEl.value = item.text;
+      qEl.focus();
+    }
     $("q-clear").style.display = "block";
     renderList();
   } else if (item.type === "username") {
-    if (qEl) qEl.value = item.text;
+    if (qEl) {
+      qEl.value = item.text;
+      qEl.focus();
+    }
     $("q-clear").style.display = "block";
     renderList();
   } else if (item.type === "note") {
-    if (qEl) qEl.value = item.item.title;
+    if (qEl) {
+      qEl.value = item.item.title;
+      qEl.focus();
+    }
     $("q-clear").style.display = "block";
     renderList();
   }

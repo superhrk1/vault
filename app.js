@@ -201,6 +201,7 @@ async function persistItems() {
   if (!STATE.items.length) { await IDB.del("vault_data"); return; }
   const blob = await Crypto.encrypt(STATE.items, STATE.masterKey);
   await IDB.set("vault_data", blob);
+  syncWithExtension(false);
 }
 
 async function loadItems() {
@@ -209,6 +210,7 @@ async function loadItems() {
   try {
     STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
     validateItems();
+    syncWithExtension(false);
   } catch {
     STATE.items = [];
   }
@@ -502,6 +504,7 @@ function lockVault() {
   LS.del("vault_session_key");
   LS.del("vault_last_activity");
   stopAutoLock();
+  syncWithExtension(true);
   
   // Clear search and suggestions state
   const suggestEl = $("search-suggestions");
@@ -3427,7 +3430,38 @@ function initAutofillUI() {
 function saveExtensionId(val) {
   STATE.autofillExtensionId = val.trim();
   LS.set("vault_autofill_extension_id", STATE.autofillExtensionId);
+  syncWithExtension(false);
 }
+
+function syncWithExtension(clear = false) {
+  const extId = STATE.autofillExtensionId || LS.get("vault_autofill_extension_id");
+  if (!extId || typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) {
+    return;
+  }
+  if (clear) {
+    chrome.runtime.sendMessage(extId, { action: "clearVault" }, () => {
+      if (chrome.runtime.lastError) { /* ignore */ }
+    });
+  } else {
+    const credentials = (STATE.items || [])
+      .filter(item => !item.deleted && item.type === "password" && item.password)
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        username: item.username || "",
+        password: item.password || "",
+        url: item.url || ""
+      }));
+    chrome.runtime.sendMessage(extId, { action: "syncVault", items: credentials }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("[Vault] Extension sync failed:", chrome.runtime.lastError.message);
+      } else {
+        console.log("[Vault] Credentials synced with extension successfully.");
+      }
+    });
+  }
+}
+
 
 // ══════════════════════════════════════════════════════════
 //  FAB PULSE

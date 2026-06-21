@@ -1,7 +1,11 @@
-// Immediately ask the background script if there are pending credentials for this tab
-chrome.runtime.sendMessage({ action: "getPendingCredentials" }, (response) => {
+// Immediately ask the background script if there are matched or pending credentials for this domain/tab
+chrome.runtime.sendMessage({
+  action: "getCredentials",
+  url: window.location.href,
+  hostname: window.location.hostname
+}, (response) => {
   if (chrome.runtime.lastError) {
-    console.log("[Vault Extension] Error checking pending credentials:", chrome.runtime.lastError.message);
+    console.log("[Vault Extension] Error checking credentials:", chrome.runtime.lastError.message);
     return;
   }
 

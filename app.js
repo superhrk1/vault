@@ -183,6 +183,7 @@ let STATE = {
   currentFilteredList: [],
   renderLimit      : 50,
   autoLockMin      : 5,
+  autofillExtensionId: "",
   drive: {
     token       : null,
     tokenExpiry : null,
@@ -200,6 +201,7 @@ async function persistItems() {
   if (!STATE.items.length) { await IDB.del("vault_data"); return; }
   const blob = await Crypto.encrypt(STATE.items, STATE.masterKey);
   await IDB.set("vault_data", blob);
+  syncWithExtension(false);
 }
 
 async function loadItems() {
@@ -208,6 +210,7 @@ async function loadItems() {
   try {
     STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
     validateItems();
+    syncWithExtension(false);
   } catch {
     STATE.items = [];
   }
@@ -241,6 +244,7 @@ async function boot() {
   STATE.drive.fileId      = LS.get("drive_file_id");
   STATE.drive.lastSync    = LS.get("drive_last_sync");
   STATE.autoLockMin    = LS.get("vault_autolock") ?? 5;
+  STATE.autofillExtensionId = LS.get("vault_autofill_extension_id") || "";
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
 
@@ -303,6 +307,7 @@ async function boot() {
   checkLockout();
   // Restore auto-lock setting UI
   initAutoLockUI();
+  initAutofillUI();
   autoBiometricUnlock();
 }
 
@@ -504,6 +509,7 @@ function lockVault() {
   LS.del("vault_session_key");
   LS.del("vault_last_activity");
   stopAutoLock();
+  syncWithExtension(true);
   
   // Clear search and suggestions state
   const suggestEl = $("search-suggestions");
@@ -2589,7 +2595,36 @@ let _clipboardClearTimer = null;
 
 function openLink(id) {
   const item = STATE.items.find(i => i.id === id);
-  if (item?.url) window.open(item.url, "_blank", "noopener,noreferrer");
+  if (!item || !item.url) return;
+
+  const extId = STATE.autofillExtensionId || LS.get("vault_autofill_extension_id");
+  if (extId && typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+    // Attempt to send a message to the extension
+    chrome.runtime.sendMessage(extId, { action: "ping" }, (response) => {
+      if (chrome.runtime.lastError || !response || !response.success) {
+        console.warn("[Vault] Extension not responding, opening tab directly.");
+        window.open(item.url, "_blank", "noopener,noreferrer");
+      } else {
+        // Send login credentials and target URL to the extension helper
+        chrome.runtime.sendMessage(extId, {
+          action: "openAndAutofill",
+          url: item.url,
+          username: item.username || "",
+          password: item.password || ""
+        }, (res) => {
+          if (chrome.runtime.lastError || !res || !res.success) {
+            console.warn("[Vault] Extension open failed, opening tab directly.");
+            window.open(item.url, "_blank", "noopener,noreferrer");
+          } else {
+            toast("Opening link with secure autofill...", "success");
+          }
+        });
+      }
+    });
+  } else {
+    // Direct open if no extension ID is configured or not supported
+    window.open(item.url, "_blank", "noopener,noreferrer");
+  }
 }
 
 async function toggleFav(id) {
@@ -3408,6 +3443,49 @@ function initAutoLockUI() {
     else if (val === STATE.autoLockMin) p.classList.add("on");
   });
 }
+
+function initAutofillUI() {
+  const inp = $("ext-id-input");
+  if (inp) {
+    inp.value = STATE.autofillExtensionId || "";
+  }
+}
+
+function saveExtensionId(val) {
+  STATE.autofillExtensionId = val.trim();
+  LS.set("vault_autofill_extension_id", STATE.autofillExtensionId);
+  syncWithExtension(false);
+}
+
+function syncWithExtension(clear = false) {
+  const extId = STATE.autofillExtensionId || LS.get("vault_autofill_extension_id");
+  if (!extId || typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) {
+    return;
+  }
+  if (clear) {
+    chrome.runtime.sendMessage(extId, { action: "clearVault" }, () => {
+      if (chrome.runtime.lastError) { /* ignore */ }
+    });
+  } else {
+    const credentials = (STATE.items || [])
+      .filter(item => !item.deleted && item.type === "password" && item.password)
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        username: item.username || "",
+        password: item.password || "",
+        url: item.url || ""
+      }));
+    chrome.runtime.sendMessage(extId, { action: "syncVault", items: credentials }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("[Vault] Extension sync failed:", chrome.runtime.lastError.message);
+      } else {
+        console.log("[Vault] Credentials synced with extension successfully.");
+      }
+    });
+  }
+}
+
 
 // ══════════════════════════════════════════════════════════
 //  FAB PULSE

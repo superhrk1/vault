@@ -60,6 +60,36 @@
       --glow-td: rgba(74, 222, 128, .18);
     }
 
+    :root.light-theme {
+      --bg: #f8fafc;
+      --s1: #ffffff;
+      --s2: #f1f5f9;
+      --s3: #e2e8f0;
+      --s4: #cbd5e1;
+      --b1: rgba(0, 0, 0, .05);
+      --b2: rgba(0, 0, 0, .09);
+      --b3: rgba(0, 0, 0, .15);
+      --tx: #0f172a;
+      --muted: #64748b;
+      --faint: #94a3b8;
+      --ac: #6366f1;
+      --ac2: #4f46e5;
+      --acbg: rgba(99, 102, 241, .13);
+      --green: #16a34a;
+      --gbg: rgba(34, 197, 94, .10);
+      --red: #dc2626;
+      --rbg: rgba(239, 68, 68, .10);
+      --amber: #d97706;
+      --abg: rgba(245, 158, 11, .10);
+      --blue: #2563eb;
+      --bbg: rgba(59, 130, 246, .10);
+      --cyan: #0891b2;
+      --glow-pw: rgba(99, 102, 241, .18);
+      --glow-bm: rgba(59, 130, 246, .18);
+      --glow-nt: rgba(245, 158, 11, .18);
+      --glow-td: rgba(34, 197, 94, .18);
+    }
+
     *,
     *::before,
     *::after {
@@ -3706,6 +3736,15 @@
     <div class="drawer-hdr" style="padding:18px; border-bottom:1px solid var(--b1); display:flex; justify-content:space-between; align-items:center; background:var(--s2); flex-shrink:0">
       <div style="font-weight:700; font-size:14px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--tx)">Settings</div>
       <div onclick="toggleSettings(false)" style="cursor:pointer; color:var(--muted); font-size:16px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:var(--s3); font-weight:bold">✕</div>
+    </div>
+
+    <div class="set-sec">
+      <div class="set-lbl">Theme</div>
+      <div class="sort-row" id="theme-row">
+        <div class="sort-chip" onclick="setTheme('dark', this)" id="theme-dark">🌙 Dark</div>
+        <div class="sort-chip" onclick="setTheme('light', this)" id="theme-light">☀️ Light</div>
+        <div class="sort-chip on" onclick="setTheme('system', this)" id="theme-system">⚙️ System</div>
+      </div>
     </div>
 
     <div class="set-sec">

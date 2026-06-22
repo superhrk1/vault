@@ -184,6 +184,7 @@ let STATE = {
   renderLimit      : 50,
   autoLockMin      : 5,
   autofillExtensionId: "",
+  theme            : "system",
   drive: {
     token       : null,
     tokenExpiry : null,
@@ -245,6 +246,13 @@ async function boot() {
   STATE.drive.lastSync    = LS.get("drive_last_sync");
   STATE.autoLockMin    = LS.get("vault_autolock") ?? 5;
   STATE.autofillExtensionId = LS.get("vault_autofill_extension_id") || "";
+  STATE.theme = LS.get("vault_theme") || "system";
+  applyTheme(STATE.theme);
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (STATE.theme === 'system') applyTheme('system');
+    });
+  }
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
 
@@ -3719,6 +3727,7 @@ function toggleSettings(show) {
     renderDrivePanel();
     renderSQSettings();
     renderBioSettings();
+    renderThemeUI();
   } else {
     if (s) s.classList.remove("show");
     if (b) b.classList.remove("show");
@@ -3914,6 +3923,38 @@ function checkInstalledState() {
       window.navigator.standalone === true) {
     markAsInstalled();
   }
+}
+
+// ══════════════════════════════════════════════════════════
+//  THEME
+// ══════════════════════════════════════════════════════════
+function applyTheme(theme) {
+  let isLight = false;
+  if (theme === "light") {
+    isLight = true;
+  } else if (theme === "system") {
+    isLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  }
+  if (isLight) {
+    document.documentElement.classList.add("light-theme");
+  } else {
+    document.documentElement.classList.remove("light-theme");
+  }
+}
+
+function setTheme(theme, el) {
+  STATE.theme = theme;
+  LS.set("vault_theme", theme);
+  applyTheme(theme);
+  renderThemeUI();
+}
+
+function renderThemeUI() {
+  const chips = document.querySelectorAll("#theme-row .sort-chip");
+  if (!chips.length) return;
+  chips.forEach(c => c.classList.remove("on"));
+  const active = document.getElementById("theme-" + STATE.theme);
+  if (active) active.classList.add("on");
 }
 
 // ══════════════════════════════════════════════════════════

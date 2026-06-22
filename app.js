@@ -446,7 +446,12 @@ function openApp() {
   if (!window._visibilitySyncListener) {
     window._visibilitySyncListener = () => {
       if (document.visibilityState === "visible" && STATE.drive.token && STATE.masterKey && navigator.onLine) {
-        pullFromDrive();
+        const now = Date.now();
+        const lastSync = window._lastAutoSyncTime || 0;
+        if (now - lastSync > 600000) { // 10 minutes cooldown
+          window._lastAutoSyncTime = now;
+          pullFromDrive();
+        }
       }
     };
     document.addEventListener("visibilitychange", window._visibilitySyncListener);
@@ -1637,16 +1642,27 @@ function generateSuggestions(query) {
   
   const cleanQ = q.startsWith("#") ? q.slice(1) : q;
   
+  const typeMap = {
+    "passwords": "password",
+    "bookmarks": "bookmark",
+    "notes": "note",
+    "todos": "todo"
+  };
+  const mappedQ = typeMap[cleanQ] || cleanQ;
+  
   if (q) {
     // Match Types
     matchingTypes = ITEM_TYPES
-      .filter(t => t.includes(cleanQ) && t !== STATE.tab && t !== STATE.typeFilter)
+      .filter(t => t.includes(mappedQ) && t !== STATE.tab && t !== STATE.typeFilter)
       .map(t => ({ type: "item-type", text: t }));
 
     // Match Tags
     const allTags = getAllTags();
     matchingTags = allTags
-      .filter(t => t.toLowerCase().includes(cleanQ) && !STATE.activeTags.includes(t))
+      .filter(t => t.toLowerCase().includes(cleanQ) && 
+                   !STATE.activeTags.includes(t) && 
+                   t.toLowerCase() !== STATE.typeFilter && 
+                   t.toLowerCase() !== STATE.tab)
       .map(t => {
         const count = allItems.filter(i => (i.tags || []).includes(t)).length;
         return { type: "tag", text: t, count };
@@ -1717,7 +1733,7 @@ function generateSuggestions(query) {
   // If autoSuggest is disabled: Render ONLY tags/types in horizontal pill row format
   if (!STATE.autoSuggest) {
     suggestEl.classList.add("tags-only");
-    STATE.focusedSuggestionIndex = 0; // Highlight the first option
+    STATE.focusedSuggestionIndex = -1; // Do not auto-highlight, allows arrow keys to work
     
     html += `<div class="suggest-tags-row">`;
     STATE.suggestions.forEach((t, idx) => {
@@ -1734,7 +1750,7 @@ function generateSuggestions(query) {
                        `<mark class="match-highlight">${esc(name.slice(actualMatchStart, actualMatchStart + cleanQ.length))}</mark>` + 
                        esc(name.slice(actualMatchStart + cleanQ.length));
       }
-      const activeClass = idx === 0 ? "active-highlight" : "";
+      const activeClass = idx === STATE.focusedSuggestionIndex ? "active-highlight" : "";
       if (isType) {
         html += `
           <span class="suggest-tag-pill type-pill ${activeClass}" onclick="selectSuggestion(${idx})" id="suggest-item-${idx}">
@@ -2005,21 +2021,29 @@ function onSearchKeyDown(e) {
       if (tagText.endsWith(",")) tagText = tagText.slice(0, -1);
       tagText = tagText.trim().toLowerCase();
 
-      if (ITEM_TYPES.includes(tagText)) {
+      const typeMap = {
+        "passwords": "password",
+        "bookmarks": "bookmark",
+        "notes": "note",
+        "todos": "todo"
+      };
+      let normalizedType = typeMap[tagText] || tagText;
+
+      if (ITEM_TYPES.includes(normalizedType)) {
         qEl.value = "";
         $("q-clear").style.display = "none";
         if (STATE.tab === "all") {
-          STATE.typeFilter = tagText === "all" ? null : tagText;
+          STATE.typeFilter = normalizedType === "all" ? null : normalizedType;
           renderSelectedTags();
           renderList();
-          toast(tagText === "all" ? "Showing all item types" : `Filtering by type: ${tagText.toUpperCase()}`, "success");
+          toast(normalizedType === "all" ? "Showing all item types" : `Filtering by type: ${normalizedType.toUpperCase()}`, "success");
         } else {
           const navEl = Array.from(document.querySelectorAll("#nav .nav-item")).find(el => {
-            return el.getAttribute("onclick")?.includes(`'${tagText}'`);
+            return el.getAttribute("onclick")?.includes(`'${normalizedType}'`);
           });
           if (navEl) {
-            switchTab(navEl, tagText);
-            toast(`Switched tab to: ${tagText.toUpperCase()}`, "success");
+            switchTab(navEl, normalizedType);
+            toast(`Switched tab to: ${normalizedType.toUpperCase()}`, "success");
           }
         }
         generateSuggestions("");
@@ -2052,11 +2076,11 @@ function onSearchKeyDown(e) {
 
   // Horizontal navigation for tags, vertical for list suggestions
   if (!STATE.autoSuggest) {
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex + 1) % items.length;
       updateSuggestionHighlight(items);
-    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       STATE.focusedSuggestionIndex = (STATE.focusedSuggestionIndex - 1 + items.length) % items.length;
       updateSuggestionHighlight(items);

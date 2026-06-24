@@ -3935,10 +3935,13 @@ function applyTheme(theme) {
   } else if (theme === "system") {
     isLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
   }
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (isLight) {
     document.documentElement.classList.add("light-theme");
+    if (metaThemeColor) metaThemeColor.setAttribute("content", "#f8fafc");
   } else {
     document.documentElement.classList.remove("light-theme");
+    if (metaThemeColor) metaThemeColor.setAttribute("content", "#0a0b10");
   }
 }
 

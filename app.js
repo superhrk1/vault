@@ -1024,6 +1024,16 @@ function handleOAuthCallback() {
   LS.set("drive_token_expiry", expiry);
   // Clean URL
   history.replaceState(null, "", location.pathname);
+
+  // Fetch email for login_hint in future silent refreshes
+  fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { "Authorization": "Bearer " + token }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data && data.email) LS.set("drive_email", data.email);
+  })
+  .catch(err => console.error("Could not fetch user email:", err));
 }
 
 function isTokenExpired() {
@@ -1052,9 +1062,13 @@ function silentTokenRefresh() {
       client_id    : clientId,
       redirect_uri : redirectUri,
       response_type: "token",
-      scope        : VAULT_CONFIG.DRIVE_SCOPE,
+      scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
       prompt       : "none",        // silent — no UI
     });
+    const savedEmail = LS.get("drive_email");
+    if (savedEmail) {
+      params.append("login_hint", savedEmail);
+    }
     const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
 
     const iframe = document.createElement("iframe");
@@ -1152,7 +1166,7 @@ function connectDrive() {
     client_id    : clientId,
     redirect_uri : redirectUri,
     response_type: "token",
-    scope        : VAULT_CONFIG.DRIVE_SCOPE,
+    scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
     prompt       : "select_account",
   });
   // Redirect in same page — no popup
@@ -1170,6 +1184,7 @@ function disconnectDrive() {
   LS.del("drive_connected");
   LS.del("drive_file_id");
   LS.del("drive_last_sync");
+  LS.del("drive_email");
   renderDrivePanel();
   renderSyncBadge();
   toast("Drive disconnected", "info");

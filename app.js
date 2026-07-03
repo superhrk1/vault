@@ -2810,6 +2810,10 @@ function buildForm(type, pre) {
           <div class="dash-switch-knob"></div>
         </div>
       </div>
+      <div id="f-cloud-kw-wrap" style="display:${STATE.mDashboard ? 'block' : 'none'}; margin-top:10px;">
+        <input class="fi" id="f-cloudKeyword" placeholder="Short keyword for clouds (e.g. Bank)" value="${esc(pre?.cloudKeyword||"")}">
+        <div style="font-size:11px;color:var(--faint);margin-top:3px">If empty, this item won't show in the keyword clouds.</div>
+      </div>
     </div>`;
 
   body.innerHTML = typeGrid + fields + priorityBlock + flagBlock + tagsBlock + dashBlock;
@@ -2833,6 +2837,8 @@ function toggleDashSwitch() {
   STATE.mDashboard = !STATE.mDashboard;
   const sw = document.getElementById("f-dash-switch");
   if (sw) sw.classList.toggle("on", STATE.mDashboard);
+  const kwWrap = document.getElementById("f-cloud-kw-wrap");
+  if (kwWrap) kwWrap.style.display = STATE.mDashboard ? "block" : "none";
 }
 
 function switchType(type, el) {
@@ -3088,6 +3094,7 @@ async function submitItem() {
     priority : STATE.mPriority || "normal",
     flagDate : fv("f-flagDate") || null,
     dashboard: STATE.mDashboard || false,
+    cloudKeyword: fv("f-cloudKeyword"),
   };
   // Todo-specific fields
   if (itemType === "todo") {
@@ -3578,7 +3585,7 @@ function renderDashboard() {
     </div>
   </div>`;
 
-  const cloudItems = STATE.items.filter(item => !item.deleted && item.dashboard);
+  const cloudItems = STATE.items.filter(item => !item.deleted && item.dashboard && item.cloudKeyword && item.cloudKeyword.trim() !== "");
   if (cloudItems.length > 0) {
     const colors = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
     let cloudHtml = `<div class="kw-cloud-container" style="margin:20px 24px; padding:24px; background:rgba(var(--s1-rgb), 0.55); border-radius:24px; text-align:center;">
@@ -3588,9 +3595,10 @@ function renderDashboard() {
        if (item.priority === "high") size = 32;
        else if (item.priority === "medium") size = 24;
        else if (item.priority === "low") size = 14;
-       const randColor = colors[(item.title.length * 7) % colors.length];
-       const pseudoRand = (item.title.length * 13) % 10;
-       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand('${item.id}')">${esc(item.title)}</span>`;
+       const dispStr = item.cloudKeyword.trim();
+       const randColor = colors[(dispStr.length * 7) % colors.length];
+       const pseudoRand = (dispStr.length * 13) % 10;
+       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand('${item.id}')">${esc(dispStr)}</span>`;
     });
     cloudHtml += `</div></div>`;
     html += cloudHtml;

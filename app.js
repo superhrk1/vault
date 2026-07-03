@@ -2800,11 +2800,11 @@ function buildForm(type, pre) {
 
   const dashBlock = `
     <div class="fg">
-      <div class="fl">Add to Dashboard</div>
+      <div class="fl">Display on home</div>
       <div class="dash-toggle-row">
         <div class="dash-toggle-info">
           <span style="font-size:16px">📊</span>
-          <span style="font-size:12px;color:var(--muted)">Show on Today's Plan</span>
+          <span style="font-size:12px;color:var(--muted)">Show item on Home screen</span>
         </div>
         <div class="dash-switch${STATE.mDashboard ? ' on' : ''}" id="f-dash-switch" onclick="toggleDashSwitch()">
           <div class="dash-switch-knob"></div>
@@ -2831,7 +2831,7 @@ function selectPri(val, el) {
 
 function toggleDashSwitch() {
   STATE.mDashboard = !STATE.mDashboard;
-  const sw = $("f-dash-switch");
+  const sw = document.getElementById("f-dash-switch");
   if (sw) sw.classList.toggle("on", STATE.mDashboard);
 }
 
@@ -3569,7 +3569,7 @@ function renderDashboard() {
       <div class="dash-ring-txt">${pct}%</div>
     </div>
     <div class="dash-info">
-      <div class="dash-title">Today's Plan</div>
+      <div class="dash-title">Home</div>
       <div class="dash-date">${dateStr}</div>
       <div class="dash-pills">
         <span class="dash-pill pending">${pendN} Pending</span>
@@ -3578,10 +3578,28 @@ function renderDashboard() {
     </div>
   </div>`;
 
+  const cloudItems = STATE.items.filter(item => !item.deleted && item.dashboard);
+  if (cloudItems.length > 0) {
+    const colors = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
+    let cloudHtml = `<div class="kw-cloud-container" style="margin:20px 24px; padding:24px; background:rgba(var(--s1-rgb), 0.55); border-radius:24px; text-align:center;">
+      <div style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-items:center;">`;
+    cloudItems.forEach(item => {
+       let size = 18;
+       if (item.priority === "high") size = 32;
+       else if (item.priority === "medium") size = 24;
+       else if (item.priority === "low") size = 14;
+       const randColor = colors[(item.title.length * 7) % colors.length];
+       const pseudoRand = (item.title.length * 13) % 10;
+       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand('${item.id}')">${esc(item.title)}</span>`;
+    });
+    cloudHtml += `</div></div>`;
+    html += cloudHtml;
+  }
+
   if (!allDash.length) {
     html += `<div class="dash-empty">
       <div class="dash-empty-ico">📋</div>
-      <div class="dash-empty-msg">No items on your dashboard yet.<br>Toggle "Add to Dashboard" when creating items.</div>
+      <div class="dash-empty-msg">No items on your Home page yet.<br>Toggle "Display on home" when creating items.</div>
     </div>`;
     el.innerHTML = html; return;
   }

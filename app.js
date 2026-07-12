@@ -1317,6 +1317,10 @@ async function pullFromDrive() {
     return false;
   }
   if (!STATE.drive.token) { toast("Connect Drive first"); return false; }
+  if (!STATE.masterKey) {
+    toast("Unlock your vault first", "warn");
+    return false;
+  }
   setSyncStatus("syncing");
   try {
     let fileId = STATE.drive.fileId;
@@ -1335,18 +1339,40 @@ async function pullFromDrive() {
       payload = await res.json();
     } catch (e) {
       if (e.message.includes("404")) {
+        // Stale fileId — clear and retry search
         STATE.drive.fileId = null;
         LS.del("drive_file_id");
-        throw new Error("Backup file not found on Drive");
+        const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}'`);
+        const res2 = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id)`);
+        const dat2 = await res2.json();
+        if (!dat2.files?.length) { toast("No backup found on Drive"); setSyncStatus("synced"); return true; }
+        fileId = dat2.files[0].id;
+        STATE.drive.fileId = fileId;
+        LS.set("drive_file_id", fileId);
+        const res3 = await driveReq(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+        payload = await res3.json();
+      } else {
+        throw e;
       }
-      throw e;
     }
 
-    if (!payload.vault) throw new Error("Invalid backup");
-    const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    if (!payload || !payload.vault) throw new Error("Invalid backup format on Drive");
+
+    let imported;
+    try {
+      imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    } catch (decErr) {
+      console.error("[Vault] Decryption failed with current key:", decErr);
+      // Data may have been encrypted by a different code version — advise user
+      throw new Error("Decryption failed — clear browser data on this device, then re-enter your PIN and pull again");
+    }
+
+    if (!Array.isArray(imported)) throw new Error("Decrypted data is not a valid vault");
+
     let added = 0;
     let updated = 0;
     for (const item of imported) {
+      if (!item || !item.id) continue;
       const existingIdx = STATE.items.findIndex(i => i.id === item.id);
       if (existingIdx === -1) { 
         STATE.items.push(item); 
@@ -1372,6 +1398,7 @@ async function pullFromDrive() {
     renderDrivePanel();
     return true;
   } catch (e) {
+    console.error("[Vault] pullFromDrive error:", e);
     setSyncStatus("error");
     if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
     else if (e.message === "Failed to fetch") toast("Offline — using local vault", "info");

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Vault Auth</title></head>
+<body>
+<!-- 
+  Lightweight silent OAuth callback.
+  Loaded inside a hidden iframe by silentTokenRefresh().
+  Extracts access_token from the URL hash and relays it
+  to the parent window. No styles, no app code.
+-->
+<script>
+(function() {
+  try {
+    const h = location.hash;
+    if (h && h.includes("access_token")) {
+      const p = new URLSearchParams(h.slice(1));
+      const token = p.get("access_token");
+      const expiresIn = parseInt(p.get("expires_in") || "3600", 10);
+      window.parent.postMessage({
+        type: "vault-silent-auth",
+        token: token,
+        expiresIn: expiresIn
+      }, location.origin);
+    } else {
+      window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+    }
+  } catch (e) {
+    window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+  }
+})();
+</script>
+</body></html>

@@ -6,25 +6,10 @@
 
 "use strict";
 
-// ── Silent OAuth iframe handler ───────────────────────────
-// If we're inside a hidden iframe for silent token refresh,
-// extract the token and send it back to the parent — don't boot the app.
-if (window !== window.parent && location.hash.includes("access_token")) {
-  try {
-    const params = new URLSearchParams(location.hash.slice(1));
-    const token = params.get("access_token");
-    const expiresIn = parseInt(params.get("expires_in") || "3600", 10);
-    window.parent.postMessage({
-      type: "vault-silent-auth",
-      token: token,
-      expiresIn: expiresIn,
-    }, location.origin);
-  } catch (e) {
-    window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
-  }
-  // Stop — don't initialize the full app in the iframe
-  throw new Error("SILENT_AUTH_IFRAME_HALT");
-}
+// ── Silent OAuth ──────────────────────────────────────────
+// Silent token refresh now uses a dedicated lightweight
+// oauth_callback.html page instead of loading the full app
+// inside a hidden iframe. See silentTokenRefresh().
 
 // ── Shortcuts ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -424,12 +409,12 @@ function openApp() {
     setTimeout(() => {
       toast("Google Drive connected", "success");
       renderSyncBadge();
-      pullFromDrive().then(success => {
-        if (success) triggerSync();
+      pullFromDrive(true).then(success => {
+        if (success) triggerSync(true);
       });
     }, 400);
   } else if (STATE.drive.token) {
-    setTimeout(() => pullFromDrive(), 400);
+    setTimeout(() => pullFromDrive(true), 400);
   } else if (LS.get("drive_connected") === "true") {
     if (!navigator.onLine) {
       setSyncStatus("offline");
@@ -441,7 +426,7 @@ function openApp() {
         setSyncStatus("syncing");
         silentTokenRefresh().then(refreshed => {
           if (refreshed) {
-            pullFromDrive();
+            pullFromDrive(true);
           } else {
             setSyncStatus("error");
             toast("Drive session expired — click sync badge to reconnect", "warn");
@@ -463,7 +448,7 @@ function openApp() {
         const lastSync = window._lastAutoSyncTime || 0;
         if (now - lastSync > 600000) { // 10 minutes cooldown
           window._lastAutoSyncTime = now;
-          pullFromDrive();
+          pullFromDrive(true);
         }
       }
     };
@@ -473,15 +458,15 @@ function openApp() {
   if (!window._onlineSyncListener) {
     window._onlineSyncListener = () => {
       if (STATE.drive.token && STATE.masterKey) {
-        pullFromDrive().then(success => {
-          if (success) triggerSync();
+        pullFromDrive(true).then(success => {
+          if (success) triggerSync(true);
         });
       } else if (LS.get("drive_connected") === "true" && STATE.masterKey) {
         console.log("[Vault] Network restored, re-checking Google Drive connection...");
         setSyncStatus("syncing");
         silentTokenRefresh().then(refreshed => {
           if (refreshed) {
-            pullFromDrive();
+            pullFromDrive(true);
           } else {
             setSyncStatus("error");
           }
@@ -1048,6 +1033,14 @@ function getOAuthRedirectUri() {
   return redirectUri;
 }
 
+function getSilentRedirectUri() {
+  // Lightweight callback page — no app boot, no white flash
+  let base = location.origin + location.pathname;
+  base = base.replace(/\/index\.html$/, "/");
+  if (!base.endsWith("/")) base += "/";
+  return base + "oauth_callback.html";
+}
+
 // Attempt silent token refresh via hidden iframe (prompt=none)
 let _silentRefreshInProgress = false;
 function silentTokenRefresh() {
@@ -1057,7 +1050,8 @@ function silentTokenRefresh() {
   _silentRefreshInProgress = true;
 
   return new Promise((resolve) => {
-    const redirectUri = getOAuthRedirectUri();
+    // Use the lightweight callback page — no app boot, no white flash
+    const redirectUri = getSilentRedirectUri();
     const params = new URLSearchParams({
       client_id    : clientId,
       redirect_uri : redirectUri,
@@ -1072,8 +1066,10 @@ function silentTokenRefresh() {
     const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
 
     const iframe = document.createElement("iframe");
-    iframe.style.cssText = "display:none;width:0;height:0;border:0";
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;opacity:0;pointer-events:none";
     iframe.id = "silent-auth-frame";
+    iframe.setAttribute("tabindex", "-1");
+    iframe.setAttribute("aria-hidden", "true");
 
     const timeout = setTimeout(() => {
       cleanup();
@@ -1083,6 +1079,7 @@ function silentTokenRefresh() {
     function cleanup() {
       clearTimeout(timeout);
       _silentRefreshInProgress = false;
+      window.removeEventListener("message", onMessage);
       try { iframe.remove(); } catch {}
     }
 
@@ -1090,7 +1087,6 @@ function silentTokenRefresh() {
       // Only accept messages from our own origin
       if (e.origin !== location.origin) return;
       if (e.data?.type === "vault-silent-auth") {
-        window.removeEventListener("message", onMessage);
         cleanup();
         if (e.data.token) {
           STATE.drive.token = e.data.token;
@@ -1104,53 +1100,16 @@ function silentTokenRefresh() {
           console.log("[Vault] Silent token refresh succeeded");
           resolve(true);
         } else {
+          console.log("[Vault] Silent refresh: no token returned");
           resolve(false);
         }
       }
     }
     window.addEventListener("message", onMessage);
 
-    // The iframe will load back to our page with the hash fragment.
-    // We need the page to detect it's in an iframe and postMessage back.
+    // The lightweight oauth_callback.html will postMessage the token back
     iframe.src = authUrl;
     document.body.appendChild(iframe);
-
-    // Also listen for iframe load to check hash directly
-    iframe.addEventListener("load", () => {
-      try {
-        const iframeHash = iframe.contentWindow.location.hash;
-        if (iframeHash && iframeHash.includes("access_token")) {
-          const iParams = new URLSearchParams(iframeHash.slice(1));
-          const token = iParams.get("access_token");
-          if (token) {
-            window.removeEventListener("message", onMessage);
-            cleanup();
-            STATE.drive.token = token;
-            LS.set("drive_token", token);
-            LS.set("drive_connected", "true");
-            const expiresIn = parseInt(iParams.get("expires_in") || "3600", 10);
-            const expiry = Date.now() + expiresIn * 1000;
-            STATE.drive.tokenExpiry = expiry;
-            LS.set("drive_token_expiry", expiry);
-            STATE.drive.status = "synced";
-            renderSyncBadge();
-            console.log("[Vault] Silent token refresh succeeded (iframe load)");
-            resolve(true);
-            return;
-          }
-        }
-        // If error in hash (e.g., interaction_required), fail silently
-        if (iframeHash && iframeHash.includes("error")) {
-          window.removeEventListener("message", onMessage);
-          cleanup();
-          console.log("[Vault] Silent refresh failed:", iframeHash);
-          resolve(false);
-        }
-      } catch (e) {
-        // Cross-origin — iframe loaded Google's page, not ours yet
-        // Wait for redirect back to our origin
-      }
-    });
   });
 }
 
@@ -1237,12 +1196,12 @@ async function driveReq(url, opts = {}, _retried = false) {
   return res;
 }
 
-async function triggerSync() {
+async function triggerSync(silent = false) {
   if (!navigator.onLine) {
     setSyncStatus("offline");
     return;
   }
-  if (!STATE.drive.token) { toast("Connect Drive first"); return; }
+  if (!STATE.drive.token) { if (!silent) toast("Connect Drive first"); return; }
   if (!STATE.masterKey) return;
   setSyncStatus("syncing");
   try {
@@ -1251,7 +1210,7 @@ async function triggerSync() {
     STATE.drive.lastSync = now;
     LS.set("drive_last_sync", now);
     setSyncStatus("synced");
-    toast("Synced to Drive", "success");
+    if (!silent) toast("Synced to Drive", "success");
     renderDrivePanel();
   } catch (e) {
     setSyncStatus("error");
@@ -1314,12 +1273,12 @@ async function uploadVault() {
   );
 }
 
-async function pullFromDrive() {
+async function pullFromDrive(silent = false) {
   if (!navigator.onLine) {
     setSyncStatus("offline");
     return false;
   }
-  if (!STATE.drive.token) { toast("Connect Drive first"); return false; }
+  if (!STATE.drive.token) { if (!silent) toast("Connect Drive first"); return false; }
   setSyncStatus("syncing");
   try {
     let fileId = STATE.drive.fileId;
@@ -1327,7 +1286,7 @@ async function pullFromDrive() {
       const q   = encodeURIComponent(`name='${VAULT_CONFIG.DRIVE_FILE_NAME}'`);
       const res = await driveReq(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id)`);
       const dat = await res.json();
-      if (!dat.files?.length) { toast("No backup found on Drive"); setSyncStatus("synced"); return true; }
+      if (!dat.files?.length) { if (!silent) toast("No backup found on Drive"); setSyncStatus("synced"); return true; }
       fileId = dat.files[0].id;
       STATE.drive.fileId = fileId;
       LS.set("drive_file_id", fileId);
@@ -1368,16 +1327,18 @@ async function pullFromDrive() {
     const now = new Date().toISOString();
     STATE.drive.lastSync = now; LS.set("drive_last_sync", now);
     if (added > 0 || updated > 0) {
+      // Always show toast when actual changes are pulled — user needs to know
       toast(`Pulled ${added} new, ${updated} updated items`, "success");
-    } else {
+    } else if (!silent) {
       toast("Vault is up to date", "info");
     }
     renderDrivePanel();
     return true;
   } catch (e) {
     setSyncStatus("error");
+    // Errors always show regardless of silent mode
     if (e.message === "SESSION_EXPIRED") toast("Drive session expired — reconnect", "error");
-    else if (e.message === "Failed to fetch") toast("Offline — using local vault", "info");
+    else if (e.message === "Failed to fetch") { if (!silent) toast("Offline — using local vault", "info"); }
     else toast("Pull failed: " + e.message, "error");
     return false;
   }

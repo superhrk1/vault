@@ -33,11 +33,21 @@ const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").repla
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const vibrate = ms => { try { navigator?.vibrate?.(ms); } catch {} };
 
-// ── LS wrapper ────────────────────────────────────────────
+// ── LS wrapper (localStorage — persisted) ─────────────────
 const LS = {
   get : k  => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set : (k,v) => localStorage.setItem(k, JSON.stringify(v)),
   del : k  => localStorage.removeItem(k),
+};
+
+// ── SS wrapper (sessionStorage — ephemeral secrets) ───────
+// Cleared when the tab closes. NOT shared across tabs.
+// NOT accessible to browser extensions with the "storage" permission.
+// Used for vault_session_key to avoid storing the raw PIN on disk.
+const SS = {
+  get : k  => { try { return JSON.parse(sessionStorage.getItem(k)); } catch { return null; } },
+  set : (k,v) => sessionStorage.setItem(k, JSON.stringify(v)),
+  del : k  => sessionStorage.removeItem(k),
 };
 
 // ── IDB wrapper (IndexedDB) ───────────────────────────────
@@ -258,7 +268,8 @@ async function boot() {
   }
   const hasVault = !!LS.get("vault_hash");
   // Auto-unlock if session key exists and within inactivity window (page refresh)
-  const sessionPin = LS.get("vault_session_key");
+  // Session key is in sessionStorage (ephemeral — cleared on tab close, not on disk)
+  const sessionPin = SS.get("vault_session_key");
   const lastActivity = parseInt(LS.get("vault_last_activity") || "0", 10);
   const autolockMins = STATE.autoLockMin ?? 5;
   const elapsedMins = lastActivity > 0 ? (Date.now() - lastActivity) / 60000 : Infinity;
@@ -276,10 +287,10 @@ async function boot() {
         return;
       }
     } catch(e) {}
-    LS.del("vault_session_key");
+    SS.del("vault_session_key");
     LS.del("vault_last_activity");
   } else {
-    LS.del("vault_session_key");
+    SS.del("vault_session_key");
     LS.del("vault_last_activity");
   }
   if (!hasVault) {
@@ -374,7 +385,7 @@ async function handlePinSubmit() {
     _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
   }
   clearFailCount(); STATE.masterKey = _pin;
-  LS.set("vault_session_key", _pin);
+  SS.set("vault_session_key", _pin);   // sessionStorage — ephemeral, not persisted to disk
   LS.set("vault_last_activity", Date.now().toString());
   _pin = "";
   await loadItems(); openApp();
@@ -385,7 +396,7 @@ async function setupVault(pw) {
   const hash = await Crypto.hashPassword(pw);
   LS.set("vault_hash", hash);
   STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
-  LS.set("vault_session_key", pw);
+  SS.set("vault_session_key", pw);   // sessionStorage — ephemeral, not persisted to disk
   LS.set("vault_last_activity", Date.now().toString());
   $("pin-entry").style.display = "none";
   $("lock-hint").style.display = "none";
@@ -499,8 +510,8 @@ function lockVault() {
   toggleSettings(false);
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
-  LS.del("vault_session_key");
-  LS.del("vault_last_activity");
+  SS.del("vault_session_key");
+  SS.del("vault_last_activity");
   stopAutoLock();
   syncWithExtension(true);
   
@@ -728,8 +739,9 @@ async function handlePinReset() {
   STATE.items = [];
   LS.del("vault_data");
   _pin = ""; _pinResetMode = false; _pinResetConfirm = null;
-  // Clear biometric since PIN changed
+  // Clear all biometric data since PIN changed
   LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
+  LS.del("vault_bio_key"); LS.del("vault_bio_iv");
   openApp();
   toast("PIN reset — Vault data was cleared for security", "warn");
 }
@@ -860,13 +872,19 @@ async function registerBiometric(pin) {
     const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
     LS.set("vault_bio_cred", credId);
 
-    // Store PIN encrypted with a random nonce
-    const nonce = crypto.getRandomValues(new Uint8Array(64));
-    const pinBytes = new TextEncoder().encode(pin);
-    const encrypted = new Uint8Array(pinBytes.length);
-    for (let i = 0; i < pinBytes.length; i++) encrypted[i] = pinBytes[i] ^ nonce[i % nonce.length];
-    LS.set("vault_bio_nonce", btoa(String.fromCharCode(...nonce)));
-    LS.set("vault_bio_enc", btoa(String.fromCharCode(...encrypted)));
+    // Encrypt PIN with AES-256-GCM (WebCrypto) — replaces the previous weak XOR
+    const bioKey  = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+    const bioIV   = crypto.getRandomValues(new Uint8Array(12));
+    const pinCT   = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: bioIV },
+      bioKey,
+      new TextEncoder().encode(pin)
+    );
+    const rawKey  = await crypto.subtle.exportKey("raw", bioKey);
+    LS.set("vault_bio_key", btoa(String.fromCharCode(...new Uint8Array(rawKey))));
+    LS.set("vault_bio_iv",  btoa(String.fromCharCode(...bioIV)));
+    LS.set("vault_bio_enc", btoa(String.fromCharCode(...new Uint8Array(pinCT))));
+    LS.del("vault_bio_nonce");   // remove legacy XOR field if present
 
     toast("Fingerprint unlock enabled", "success");
   } catch (e) {
@@ -896,24 +914,27 @@ async function biometricUnlock() {
       }
     });
 
-    // Biometric succeeded — recover PIN
-    const nonce = Uint8Array.from(atob(LS.get("vault_bio_nonce")), c => c.charCodeAt(0));
-    const enc   = Uint8Array.from(atob(LS.get("vault_bio_enc")),   c => c.charCodeAt(0));
-    const pinBytes = new Uint8Array(enc.length);
-    for (let i = 0; i < enc.length; i++) pinBytes[i] = enc[i] ^ nonce[i % nonce.length];
-    const pin = new TextDecoder().decode(pinBytes);
+    // Biometric succeeded — recover PIN using AES-GCM decryption
+    const rawKey = Uint8Array.from(atob(LS.get("vault_bio_key")), c => c.charCodeAt(0));
+    const bioIV  = Uint8Array.from(atob(LS.get("vault_bio_iv")),  c => c.charCodeAt(0));
+    const pinCT  = Uint8Array.from(atob(LS.get("vault_bio_enc")), c => c.charCodeAt(0));
+    const bioKey = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
+    const pinBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bioIV }, bioKey, pinCT);
+    const pin = new TextDecoder().decode(pinBuf);
 
     const hash = await Crypto.hashPassword(pin);
     if (hash === LS.get("vault_hash")) {
       clearFailCount();
       STATE.masterKey = pin;
+      SS.set("vault_session_key", pin);   // sessionStorage — ephemeral
+      LS.set("vault_last_activity", Date.now().toString());
       await loadItems();
       openApp();
       toast("Unlocked with fingerprint", "success");
     } else {
       // PIN changed since bio was registered
       setLockErr("Fingerprint data outdated — use PIN");
-      LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
+      LS.del("vault_bio_cred"); LS.del("vault_bio_key"); LS.del("vault_bio_iv"); LS.del("vault_bio_enc");
       $("bio-section").classList.remove("show");
     }
   } catch (e) {
@@ -974,7 +995,9 @@ async function toggleBiometricSetting() {
   if (hasCred) {
     if (confirm("Disable biometric fingerprint unlock?")) {
       LS.del("vault_bio_cred");
-      LS.del("vault_bio_nonce");
+      LS.del("vault_bio_nonce"); // legacy XOR field
+      LS.del("vault_bio_key");
+      LS.del("vault_bio_iv");
       LS.del("vault_bio_enc");
       toast("Biometric unlock disabled", "info");
       renderBioSettings();
@@ -1113,12 +1136,31 @@ function silentTokenRefresh() {
   });
 }
 
-function connectDrive() {
+async function connectDrive() {
   const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
   if (!clientId || clientId.startsWith("PASTE_")) {
     toast("Add your Client ID to config.js first — see SETUP.md");
     return;
   }
+
+  // First, attempt a completely silent token acquisition via hidden iframe.
+  // If the user is already signed in to Google and has granted access,
+  // this returns a token instantly with zero UI — seamless connectivity.
+  setSyncStatus("syncing");
+  renderSyncBadge();
+  const refreshed = await silentTokenRefresh();
+  if (refreshed) {
+    // Silent success — user never sees the OAuth screen
+    toast("Google Drive connected", "success");
+    pullFromDrive(true).then(success => { if (success) triggerSync(true); });
+    renderDrivePanel();
+    return;
+  }
+
+  // Silent auth failed (user not logged in, revoked access, or first time).
+  // Fall back to a full-page OAuth redirect.
+  setSyncStatus(STATE.drive.status === "syncing" ? "offline" : STATE.drive.status);
+  renderSyncBadge();
   const redirectUri = getOAuthRedirectUri();
   console.log("OAuth redirect_uri:", redirectUri);
   const params = new URLSearchParams({
@@ -1126,9 +1168,11 @@ function connectDrive() {
     redirect_uri : redirectUri,
     response_type: "token",
     scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
-    prompt       : "select_account",
+    // Don't force account picker — if user has one account, skip straight through
+    prompt       : "consent",
   });
-  // Redirect in same page — no popup
+  const savedEmail = LS.get("drive_email");
+  if (savedEmail) params.append("login_hint", savedEmail);
   const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
   location.href = authUrl;
 }
@@ -1354,7 +1398,15 @@ function renderSyncBadge() {
   const label = $("sync-label");
   const s = STATE.drive.status;
   badge.className = "sync-badge " + s;
-  const map = { offline:"Local", syncing:"Syncing…", synced:"Drive ✓", error:"Sync Error", noconfig:"No Drive" };
+  const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
+  const neverConnected = LS.get("drive_connected") !== "true";
+  const map = {
+    offline  : neverConnected ? "Connect Drive" : "Offline",
+    syncing  : "Syncing…",
+    synced   : "Drive ✓",
+    error    : "Reconnect",
+    noconfig : configured ? "Connect Drive" : "No Drive",
+  };
   label.textContent = map[s] || s;
 }
 
@@ -1364,16 +1416,23 @@ function handleSyncBadgeClick() {
     return;
   }
   const s = STATE.drive.status;
-  if (s === "error" || (LS.get("drive_connected") === "true" && !STATE.drive.token)) {
-    connectDrive();
-  } else if (s === "offline") {
-    toggleSettings(true);
-    setTimeout(() => {
-      $("drive-panel")?.scrollIntoView({ behavior: "smooth" });
-    }, 200);
-  } else if (STATE.drive.token) {
+  const wasConnected = LS.get("drive_connected") === "true";
+
+  if (s === "synced" || (STATE.drive.token && s !== "error")) {
+    // Already connected — manual sync
     triggerSync();
+    return;
   }
+
+  if (s === "syncing") {
+    // Already in progress — do nothing
+    return;
+  }
+
+  // All other states (noconfig, offline, error) — connectDrive() handles
+  // silent-first auth internally: tries prompt=none iframe first, only
+  // falls back to a full page redirect if the user isn't already authenticated.
+  connectDrive();
 }
 
 function renderDrivePanel() {

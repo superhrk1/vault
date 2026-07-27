@@ -1045,8 +1045,9 @@ function handleOAuthCallback() {
 }
 
 function isTokenExpired() {
-  if (!STATE.drive.tokenExpiry) return false; // no expiry stored, try anyway
-  return Date.now() >= STATE.drive.tokenExpiry - 60000; // expired or within 1 min
+  if (!STATE.drive.tokenExpiry) return !STATE.drive.token;
+  // Consider token expired if within 5 minutes (300,000 ms) of expiration to proactively refresh
+  return Date.now() >= STATE.drive.tokenExpiry - 300000;
 }
 
 function getOAuthRedirectUri() {
@@ -1057,14 +1058,65 @@ function getOAuthRedirectUri() {
 }
 
 function getSilentRedirectUri() {
-  // Lightweight callback page — no app boot, no white flash
   let base = location.origin + location.pathname;
   base = base.replace(/\/index\.html$/, "/");
   if (!base.endsWith("/")) base += "/";
   return base + "oauth_callback.html";
 }
 
-// Attempt silent token refresh via hidden iframe (prompt=none)
+// ── Google Identity Services (GIS) Helper ──────────────────
+function getGisTokenClient(promptMode = "", callback = null) {
+  const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId.startsWith("PASTE_")) return null;
+
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: VAULT_CONFIG.DRIVE_SCOPE + " email",
+        prompt: promptMode,
+        callback: (resp) => {
+          if (resp && resp.access_token) {
+            const token = resp.access_token;
+            STATE.drive.token = token;
+            LS.set("drive_token", token);
+            LS.set("drive_connected", "true");
+            const expiresIn = parseInt(resp.expires_in || "3600", 10);
+            const expiry = Date.now() + expiresIn * 1000;
+            STATE.drive.tokenExpiry = expiry;
+            LS.set("drive_token_expiry", expiry);
+            STATE.drive.status = "synced";
+            renderSyncBadge();
+            renderDrivePanel();
+
+            fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { "Authorization": "Bearer " + token }
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.email) LS.set("drive_email", data.email);
+            })
+            .catch(() => {});
+
+            if (callback) callback(true, token);
+          } else {
+            console.log("[Vault] GIS token response without token:", resp);
+            if (callback) callback(false, null);
+          }
+        },
+        error_callback: (err) => {
+          console.warn("[Vault] GIS error:", err);
+          if (callback) callback(false, null);
+        }
+      });
+      return client;
+    } catch (e) {
+      console.warn("[Vault] Failed to init GIS token client:", e);
+    }
+  }
+  return null;
+}
+
 let _silentRefreshInProgress = false;
 function silentTokenRefresh() {
   if (_silentRefreshInProgress) return Promise.resolve(false);
@@ -1073,66 +1125,95 @@ function silentTokenRefresh() {
   _silentRefreshInProgress = true;
 
   return new Promise((resolve) => {
-    // Use the lightweight callback page — no app boot, no white flash
-    const redirectUri = getSilentRedirectUri();
-    const params = new URLSearchParams({
-      client_id    : clientId,
-      redirect_uri : redirectUri,
-      response_type: "token",
-      scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
-      prompt       : "none",        // silent — no UI
-    });
-    const savedEmail = LS.get("drive_email");
-    if (savedEmail) {
-      params.append("login_hint", savedEmail);
-    }
-    const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
-
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;opacity:0;pointer-events:none";
-    iframe.id = "silent-auth-frame";
-    iframe.setAttribute("tabindex", "-1");
-    iframe.setAttribute("aria-hidden", "true");
-
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve(false);
-    }, 8000);
-
-    function cleanup() {
-      clearTimeout(timeout);
+    let resolved = false;
+    const finish = (success) => {
+      if (resolved) return;
+      resolved = true;
       _silentRefreshInProgress = false;
-      window.removeEventListener("message", onMessage);
-      try { iframe.remove(); } catch {}
-    }
+      resolve(success);
+    };
 
-    function onMessage(e) {
-      // Only accept messages from our own origin
-      if (e.origin !== location.origin) return;
-      if (e.data?.type === "vault-silent-auth") {
-        cleanup();
-        if (e.data.token) {
-          STATE.drive.token = e.data.token;
-          LS.set("drive_token", e.data.token);
-          LS.set("drive_connected", "true");
-          const expiry = Date.now() + (e.data.expiresIn || 3600) * 1000;
-          STATE.drive.tokenExpiry = expiry;
-          LS.set("drive_token_expiry", expiry);
-          STATE.drive.status = "synced";
-          renderSyncBadge();
-          console.log("[Vault] Silent token refresh succeeded");
-          resolve(true);
-        } else {
-          console.log("[Vault] Silent refresh: no token returned");
-          resolve(false);
-        }
+    // 1. Try modern Google Identity Services (GIS) token request first
+    const gisClient = getGisTokenClient("", (success) => {
+      finish(success);
+    });
+
+    if (gisClient) {
+      try {
+        const savedEmail = LS.get("drive_email");
+        gisClient.requestAccessToken({
+          prompt: "",
+          hint: savedEmail || undefined
+        });
+        setTimeout(() => {
+          if (!resolved) {
+            tryFallbackIframe();
+          }
+        }, 3500);
+        return;
+      } catch (e) {
+        console.warn("[Vault] GIS silent request failed, using iframe fallback", e);
       }
     }
-    window.addEventListener("message", onMessage);
 
-    // The lightweight oauth_callback.html will postMessage the token back
-    iframe.src = authUrl;
-    document.body.appendChild(iframe);
+    tryFallbackIframe();
+
+    function tryFallbackIframe() {
+      const redirectUri = getSilentRedirectUri();
+      const params = new URLSearchParams({
+        client_id    : clientId,
+        redirect_uri : redirectUri,
+        response_type: "token",
+        scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
+        prompt       : "none",
+      });
+      const savedEmail = LS.get("drive_email");
+      if (savedEmail) params.append("login_hint", savedEmail);
+      const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + params;
+
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;opacity:0;pointer-events:none";
+      iframe.id = "silent-auth-frame";
+      iframe.setAttribute("tabindex", "-1");
+      iframe.setAttribute("aria-hidden", "true");
+
+      const timeout = setTimeout(() => {
+        cleanup();
+        finish(false);
+      }, 4000);
+
+      function cleanup() {
+        clearTimeout(timeout);
+        window.removeEventListener("message", onMessage);
+        try { iframe.remove(); } catch {}
+      }
+
+      function onMessage(e) {
+        if (e.origin !== location.origin) return;
+        if (e.data?.type === "vault-silent-auth") {
+          cleanup();
+          if (e.data.token) {
+            STATE.drive.token = e.data.token;
+            LS.set("drive_token", e.data.token);
+            LS.set("drive_connected", "true");
+            const expiry = Date.now() + (e.data.expiresIn || 3600) * 1000;
+            STATE.drive.tokenExpiry = expiry;
+            LS.set("drive_token_expiry", expiry);
+            STATE.drive.status = "synced";
+            renderSyncBadge();
+            renderDrivePanel();
+            console.log("[Vault] Silent token refresh succeeded via callback page");
+            finish(true);
+          } else {
+            console.log("[Vault] Silent refresh: no token returned");
+            finish(false);
+          }
+        }
+      }
+      window.addEventListener("message", onMessage);
+      iframe.src = authUrl;
+      document.body.appendChild(iframe);
+    }
   });
 }
 
@@ -1143,22 +1224,42 @@ async function connectDrive() {
     return;
   }
 
-  // First, attempt a completely silent token acquisition via hidden iframe.
-  // If the user is already signed in to Google and has granted access,
-  // this returns a token instantly with zero UI — seamless connectivity.
   setSyncStatus("syncing");
   renderSyncBadge();
+
+  // 1. Silent token refresh first
   const refreshed = await silentTokenRefresh();
   if (refreshed) {
-    // Silent success — user never sees the OAuth screen
     toast("Google Drive connected", "success");
     pullFromDrive(true).then(success => { if (success) triggerSync(true); });
     renderDrivePanel();
     return;
   }
 
-  // Silent auth failed (user not logged in, revoked access, or first time).
-  // Fall back to a full-page OAuth redirect.
+  // 2. GIS interactive popup flow (uses existing consent, eliminates 2FA mobile prompts!)
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    const gisClient = getGisTokenClient("select_account", (success) => {
+      if (success) {
+        toast("Google Drive connected", "success");
+        pullFromDrive(true).then(succ => { if (succ) triggerSync(true); });
+        renderDrivePanel();
+      } else {
+        setSyncStatus(LS.get("drive_connected") === "true" ? "error" : "offline");
+        renderSyncBadge();
+      }
+    });
+
+    if (gisClient) {
+      const savedEmail = LS.get("drive_email");
+      gisClient.requestAccessToken({
+        prompt: "select_account",
+        hint: savedEmail || undefined
+      });
+      return;
+    }
+  }
+
+  // 3. Fallback redirect WITHOUT prompt: "consent" (uses select_account so 2FA is NOT re-triggered)
   setSyncStatus(STATE.drive.status === "syncing" ? "offline" : STATE.drive.status);
   renderSyncBadge();
   const redirectUri = getOAuthRedirectUri();
@@ -1168,8 +1269,7 @@ async function connectDrive() {
     redirect_uri : redirectUri,
     response_type: "token",
     scope        : VAULT_CONFIG.DRIVE_SCOPE + " email",
-    // Don't force account picker — if user has one account, skip straight through
-    prompt       : "consent",
+    prompt       : "select_account",
   });
   const savedEmail = LS.get("drive_email");
   if (savedEmail) params.append("login_hint", savedEmail);
@@ -1194,9 +1294,9 @@ function disconnectDrive() {
 }
 
 async function driveReq(url, opts = {}, _retried = false) {
-  // Proactively refresh if token is expired (before wasting a round-trip)
-  if (isTokenExpired() && !_retried) {
-    console.log("[Vault] Token expired, attempting silent refresh...");
+  // Proactively refresh if token is missing or near expiry (< 5 min)
+  if ((isTokenExpired() || !STATE.drive.token) && !_retried) {
+    console.log("[Vault] Token missing/expired, attempting silent refresh...");
     const refreshed = await silentTokenRefresh();
     if (!refreshed) {
       STATE.drive.token = null;
@@ -1217,12 +1317,11 @@ async function driveReq(url, opts = {}, _retried = false) {
     },
   });
   if (res.status === 401 || res.status === 403) {
-    // Token expired or insufficient scope — try silent refresh once
     if (!_retried) {
       console.log("[Vault] Got 401/403, attempting silent token refresh...");
       const refreshed = await silentTokenRefresh();
       if (refreshed) {
-        return driveReq(url, opts, true); // retry with fresh token
+        return driveReq(url, opts, true);
       }
     }
     STATE.drive.token = null;
@@ -1483,12 +1582,21 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+let _syncDebounceTimer = null;
+function triggerSyncDebounced(delay = 1000) {
+  if (LS.get("drive_connected") !== "true") return;
+  if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+  _syncDebounceTimer = setTimeout(() => {
+    triggerSync(true);
+  }, delay);
+}
+
 async function saveItem(item) {
   item.updated = Date.now();
   const idx = STATE.items.findIndex(i => i.id === item.id);
   if (idx >= 0) STATE.items[idx] = item; else STATE.items.push(item);
   await persistItems();
-  if (STATE.drive.token) triggerSync();
+  triggerSyncDebounced();
 }
 
 async function removeItem(id) {
@@ -1500,7 +1608,7 @@ async function removeItem(id) {
     STATE.items.push({ id, deleted: true, updated: Date.now() });
   }
   await persistItems();
-  if (STATE.drive.token) triggerSync();
+  triggerSyncDebounced();
   renderAll(); renderTagStrip(); updateStats();
 }
 

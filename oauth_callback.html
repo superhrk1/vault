@@ -11,20 +11,31 @@
 (function() {
   try {
     const h = location.hash;
+    const target = window.opener || window.parent;
     if (h && h.includes("access_token")) {
       const p = new URLSearchParams(h.slice(1));
       const token = p.get("access_token");
       const expiresIn = parseInt(p.get("expires_in") || "3600", 10);
-      window.parent.postMessage({
-        type: "vault-silent-auth",
-        token: token,
-        expiresIn: expiresIn
-      }, location.origin);
+      if (target) {
+        target.postMessage({
+          type: "vault-silent-auth",
+          token: token,
+          expiresIn: expiresIn
+        }, location.origin);
+      }
     } else {
-      window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+      if (target) {
+        target.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+      }
     }
   } catch (e) {
-    window.parent.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+    const target = window.opener || window.parent;
+    if (target) {
+      target.postMessage({ type: "vault-silent-auth", token: null }, location.origin);
+    }
+  }
+  if (window.opener) {
+    try { window.close(); } catch {}
   }
 })();
 </script>

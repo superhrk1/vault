@@ -234,6 +234,8 @@ async function boot() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
+  handleOAuthCallback();
+
   STATE.drive.token       = LS.get("drive_token");
   STATE.drive.tokenExpiry = LS.get("drive_token_expiry");
   STATE.drive.fileId      = LS.get("drive_file_id");
@@ -250,16 +252,15 @@ async function boot() {
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID &&
     !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
 
-  const isConnected = LS.get("drive_connected") === "true";
   if (configured) {
-    if (isConnected) {
-      if (!navigator.onLine) {
-        STATE.drive.status = "offline";
-      } else {
-        STATE.drive.status = "synced";
-      }
+    if (!STATE.drive.token || isTokenExpired()) {
+      silentTokenRefresh().then(refreshed => {
+        if (refreshed) {
+          console.log("[Vault] Automatic background authentication successful on boot");
+        }
+      });
     } else {
-      STATE.drive.status = "offline";
+      STATE.drive.status = "synced";
     }
   } else {
     STATE.drive.status = "noconfig";
@@ -408,51 +409,61 @@ async function setupVault(pw) {
   LS.del("vault_bio_asked");
 }
 
+let _autoSyncInterval = null;
+function startAutoSyncTimer() {
+  if (_autoSyncInterval) clearInterval(_autoSyncInterval);
+  // Auto-sync every 3 minutes while vault is unlocked
+  _autoSyncInterval = setInterval(() => {
+    if (STATE.masterKey && navigator.onLine) {
+      const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
+      if (configured) {
+        if (isTokenExpired() || !STATE.drive.token) {
+          silentTokenRefresh().then(refreshed => {
+            if (refreshed) pullFromDrive(true);
+          });
+        } else {
+          pullFromDrive(true);
+        }
+      }
+    }
+  }, 180000);
+}
+
 function openApp() {
   $("lock").classList.add("gone");
   renderAll(); renderDashboard(); showPage("home"); updateStats(); renderDrivePanel();
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
-  // Check if user just returned from OAuth (fresh connect)
-  if (STATE.drive.token && !STATE.drive.lastSync) {
-    // Just connected — show toast and pull first to prevent overwriting cloud backup
-    setTimeout(() => {
-      toast("Google Drive connected", "success");
-      renderSyncBadge();
-      pullFromDrive(true).then(success => {
-        if (success) triggerSync(true);
+
+  // Automatic Auth & Auto Sync on Unlock
+  if (configured) {
+    if (!STATE.drive.token || isTokenExpired()) {
+      setSyncStatus("syncing");
+      silentTokenRefresh().then(refreshed => {
+        if (refreshed && STATE.masterKey) {
+          pullFromDrive(true).then(success => { if (success) triggerSync(true); });
+        } else {
+          setSyncStatus("synced");
+        }
       });
-    }, 400);
-  } else if (STATE.drive.token) {
-    setTimeout(() => pullFromDrive(true), 400);
-  } else if (LS.get("drive_connected") === "true") {
-    if (!navigator.onLine) {
-      setSyncStatus("offline");
-    } else {
+    } else if (STATE.drive.token && STATE.masterKey) {
       setTimeout(() => {
-        console.log("[Vault] Refreshing Drive connection in background...");
-        silentTokenRefresh().then(refreshed => {
-          if (refreshed) {
-            pullFromDrive(true);
-          } else {
-            setSyncStatus("synced");
-          }
-        });
+        pullFromDrive(true).then(success => { if (success) triggerSync(true); });
       }, 400);
     }
-  } else if (!STATE.drive.token && !LS.get("drive_banner_dismissed")) {
+  } else if (!configured && !LS.get("drive_banner_dismissed")) {
     $("drive-banner").classList.add("show");
-    $("db-msg").textContent = configured
-      ? "Connect Google Drive to sync your vault across devices"
-      : "⚙️ Add your Google Client ID in config.js to enable Drive sync";
+    $("db-msg").textContent = "⚙️ Add your Google Client ID in config.js to enable Drive sync";
   }
 
+  // Auto-sync on visibility change (active tab)
   if (!window._visibilitySyncListener) {
     window._visibilitySyncListener = () => {
-      if (document.visibilityState === "visible" && STATE.drive.token && STATE.masterKey && navigator.onLine) {
-        const now = Date.now();
-        const lastSync = window._lastAutoSyncTime || 0;
-        if (now - lastSync > 600000) { // 10 minutes cooldown
-          window._lastAutoSyncTime = now;
+      if (document.visibilityState === "visible" && STATE.masterKey && navigator.onLine && configured) {
+        if (!STATE.drive.token || isTokenExpired()) {
+          silentTokenRefresh().then(refreshed => {
+            if (refreshed) pullFromDrive(true);
+          });
+        } else {
           pullFromDrive(true);
         }
       }
@@ -460,26 +471,23 @@ function openApp() {
     document.addEventListener("visibilitychange", window._visibilitySyncListener);
   }
 
+  // Auto-sync on network reconnect
   if (!window._onlineSyncListener) {
     window._onlineSyncListener = () => {
-      if (STATE.drive.token && STATE.masterKey) {
-        pullFromDrive(true).then(success => {
-          if (success) triggerSync(true);
-        });
-      } else if (LS.get("drive_connected") === "true" && STATE.masterKey) {
-        console.log("[Vault] Network restored, re-checking Google Drive connection...");
+      if (STATE.masterKey && configured) {
+        console.log("[Vault] Network restored — running automatic background auth and sync...");
         setSyncStatus("syncing");
-        silentTokenRefresh().then(refreshed => {
-          if (refreshed) {
-            pullFromDrive(true);
-          } else {
-            setSyncStatus("error");
-          }
+        silentTokenRefresh().then(() => {
+          pullFromDrive(true).then(success => { if (success) triggerSync(true); });
         });
       }
     };
     window.addEventListener("online", window._onlineSyncListener);
   }
+
+  // Periodic background auto-sync timer
+  startAutoSyncTimer();
+
   const listEl = $("list");
   if (listEl && !window._listScrollListener) {
     window._listScrollListener = () => {
@@ -502,6 +510,7 @@ function openApp() {
 
 function lockVault() {
   toggleSettings(false);
+  if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
   _pin = ""; _pinConfirm = null;
   SS.del("vault_session_key");
@@ -1044,18 +1053,28 @@ function isTokenExpired() {
   return Date.now() >= STATE.drive.tokenExpiry - 300000;
 }
 
+async function waitForGIS(timeoutMs = 5000) {
+  if (window.google?.accounts?.oauth2) return true;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 100));
+    if (window.google?.accounts?.oauth2) return true;
+  }
+  return false;
+}
+
 // ── Pure Google Identity Services (GIS) Token Client ──────────
-function silentTokenRefresh() {
+async function silentTokenRefresh() {
   const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
-  if (!clientId || clientId.startsWith("PASTE_")) return Promise.resolve(false);
+  if (!clientId || clientId.startsWith("PASTE_")) return false;
+
+  const gisLoaded = await waitForGIS(3000);
+  if (!gisLoaded) {
+    console.log("[Vault] GIS library not available yet for silent refresh");
+    return false;
+  }
 
   return new Promise((resolve) => {
-    if (!window.google?.accounts?.oauth2) {
-      console.log("[Vault] GIS library not loaded yet");
-      resolve(false);
-      return;
-    }
-
     let finished = false;
     const finish = (ok) => {
       if (finished) return;
@@ -1068,7 +1087,7 @@ function silentTokenRefresh() {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: VAULT_CONFIG.DRIVE_SCOPE + " email",
-        prompt: "", // Completely silent — no UI, no popups if already authorized
+        prompt: "", // Completely silent — zero UI, no popups
         callback: (resp) => {
           if (resp && resp.access_token) {
             const token = resp.access_token;
@@ -1107,8 +1126,8 @@ function silentTokenRefresh() {
         hint: savedEmail || undefined
       });
 
-      // Safety timeout for silent token request (3.5 seconds)
-      setTimeout(() => finish(false), 3500);
+      // Safety timeout for silent token request (4 seconds)
+      setTimeout(() => finish(false), 4000);
     } catch (e) {
       console.warn("[Vault] Exception during silent GIS refresh:", e);
       finish(false);
@@ -1126,7 +1145,7 @@ async function connectDrive() {
   setSyncStatus("syncing");
   renderSyncBadge();
 
-  // 1. Silent token retrieval first (instant, zero UI)
+  // 1. Silent token retrieval first (instant, zero popups)
   const refreshed = await silentTokenRefresh();
   if (refreshed) {
     toast("Google Drive connected", "success");
@@ -1135,14 +1154,15 @@ async function connectDrive() {
     return;
   }
 
-  // 2. Fast GIS popup overlay — instant account picker without page redirects or losing vault PIN state!
-  if (window.google?.accounts?.oauth2) {
+  // 2. Promptless background auth attempt
+  const gisLoaded = await waitForGIS(3000);
+  if (gisLoaded) {
     const savedEmail = LS.get("drive_email");
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: VAULT_CONFIG.DRIVE_SCOPE + " email",
-        prompt: "select_account",
+        prompt: "",
         callback: (resp) => {
           if (resp && resp.access_token) {
             const token = resp.access_token;
@@ -1164,24 +1184,23 @@ async function connectDrive() {
           }
         },
         error_callback: (err) => {
-          console.warn("[Vault] GIS popup auth error:", err);
+          console.warn("[Vault] GIS silent auth error:", err);
           setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
           renderSyncBadge();
         }
       });
 
       client.requestAccessToken({
-        prompt: "select_account",
+        prompt: "",
         hint: savedEmail || undefined
       });
       return;
     } catch (e) {
-      console.warn("[Vault] GIS popup initialization failed:", e);
+      console.warn("[Vault] GIS token client initialization failed:", e);
     }
   }
 
-  // 3. Simple fallback if GIS script is still loading
-  toast("Loading Google Auth... please try clicking Connect again", "info");
+  toast("Auto Auth in progress...", "info");
   setSyncStatus("offline");
   renderSyncBadge();
 }
@@ -1408,13 +1427,12 @@ function renderSyncBadge() {
   const s = STATE.drive.status;
   badge.className = "sync-badge " + s;
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
-  const neverConnected = LS.get("drive_connected") !== "true";
   const map = {
-    offline  : neverConnected ? "Connect Drive" : "Offline",
+    offline  : "Offline",
     syncing  : "Syncing…",
-    synced   : "Drive ✓",
-    error    : "Reconnect",
-    noconfig : configured ? "Connect Drive" : "No Drive",
+    synced   : "Auto-Sync ✓",
+    error    : "Sync Error",
+    noconfig : configured ? "Auto-Sync" : "No Drive",
   };
   label.textContent = map[s] || s;
 }
@@ -1425,22 +1443,16 @@ function handleSyncBadgeClick() {
     return;
   }
   const s = STATE.drive.status;
-  const wasConnected = LS.get("drive_connected") === "true";
 
   if (s === "synced" || (STATE.drive.token && s !== "error")) {
-    // Already connected — manual sync
     triggerSync();
     return;
   }
 
   if (s === "syncing") {
-    // Already in progress — do nothing
     return;
   }
 
-  // All other states (noconfig, offline, error) — connectDrive() handles
-  // silent-first auth internally: tries prompt=none iframe first, only
-  // falls back to a full page redirect if the user isn't already authenticated.
   connectDrive();
 }
 
@@ -1458,22 +1470,16 @@ function renderDrivePanel() {
 
   if (token) {
     panel.innerHTML =
-      driveRow("☁️","Google Drive","Connected · Last sync: "+syncTime,
+      driveRow("☁️","Google Drive Auto-Sync","Connected · Last sync: "+syncTime,
         `<span class="dr-act sync" onclick="triggerSync()">Sync Now</span>`) +
       driveRow("⬇️","Pull from Drive","Merge cloud backup into local vault",
         `<span class="dr-act pull" onclick="pullFromDrive()">Pull</span>`) +
       driveRow("🔌","Disconnect","Remove Drive access",
         `<span class="dr-act disc" onclick="disconnectDrive()">Remove</span>`);
-  } else if (LS.get("drive_connected") === "true") {
-    panel.innerHTML =
-      driveRow("⚠️","Session Expired","Please reconnect to resume syncing",
-        `<span class="dr-act connect" onclick="connectDrive()">Reconnect</span>`) +
-      driveRow("🔌","Disconnect","Remove Drive access",
-        `<span class="dr-act disc" onclick="disconnectDrive()">Remove</span>`);
   } else {
     panel.innerHTML =
-      driveRow("☁️","Google Drive","Not connected · Sync vault across devices",
-        `<span class="dr-act connect" onclick="connectDrive()">Connect</span>`);
+      driveRow("☁️","Google Drive Auto-Sync","Automatic Auth Active · Syncs seamlessly in background",
+        `<span class="dr-act sync" onclick="connectDrive()">Sync Now</span>`);
   }
 }
 

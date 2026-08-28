@@ -216,6 +216,7 @@ async function loadItems() {
 function validateItems() {
   STATE.items = STATE.items.filter(item => {
     if (!item || typeof item !== 'object') return false;
+    if (item.deleted) return true; // Tombstones are minimal — don't backfill defaults
     if (!item.id) item.id = genId();
     if (!item.type) item.type = 'note';
     if (!item.title) item.title = 'Untitled';
@@ -1128,16 +1129,85 @@ function disconnectDrive() {
   toast("Drive disconnected", "info");
 }
 
+let _silentRefreshInProgress = null;
+async function silentTokenRefresh() {
+  // Deduplicate concurrent refresh attempts
+  if (_silentRefreshInProgress) return _silentRefreshInProgress;
+
+  _silentRefreshInProgress = (async () => {
+    try {
+      const gisLoaded = await waitForGIS(3000);
+      if (!gisLoaded) return false;
+
+      const clientId = VAULT_CONFIG.GOOGLE_CLIENT_ID;
+      const savedEmail = LS.get("drive_email");
+
+      return await new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 8000);
+        try {
+          const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: VAULT_CONFIG.DRIVE_SCOPE + " email",
+            prompt: "",
+            callback: (resp) => {
+              clearTimeout(timeout);
+              if (resp && resp.access_token) {
+                STATE.drive.token = resp.access_token;
+                LS.set("drive_token", resp.access_token);
+                const expiresIn = parseInt(resp.expires_in || "3600", 10);
+                const expiry = Date.now() + expiresIn * 1000;
+                STATE.drive.tokenExpiry = expiry;
+                LS.set("drive_token_expiry", expiry);
+                renderSyncBadge();
+                renderDrivePanel();
+                console.log("[Vault] Silent token refresh succeeded");
+                resolve(true);
+              } else {
+                console.warn("[Vault] Silent token refresh returned no token");
+                resolve(false);
+              }
+            },
+            error_callback: (err) => {
+              clearTimeout(timeout);
+              console.warn("[Vault] Silent token refresh error:", err);
+              resolve(false);
+            }
+          });
+          client.requestAccessToken({ prompt: "", hint: savedEmail || undefined });
+        } catch (e) {
+          clearTimeout(timeout);
+          console.warn("[Vault] Silent token refresh exception:", e);
+          resolve(false);
+        }
+      });
+    } catch (e) {
+      console.warn("[Vault] Silent token refresh failed:", e);
+      return false;
+    }
+  })();
+
+  try { return await _silentRefreshInProgress; }
+  finally { _silentRefreshInProgress = null; }
+}
+
 async function ensureDriveAuth() {
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
   if (!configured || !navigator.onLine) return false;
   if (STATE.drive.token && !isTokenExpired()) return true;
-  // If token is expired, do not launch unprompted popups in background
+  // Token expired — attempt silent refresh (no popup) if previously connected
+  if (LS.get("drive_connected") === "true") {
+    return await silentTokenRefresh();
+  }
   return false;
 }
 
 async function driveReq(url, opts = {}, _retried = false) {
   if (isTokenExpired() || !STATE.drive.token) {
+    // Attempt silent refresh before giving up
+    if (!_retried && LS.get("drive_connected") === "true") {
+      const refreshed = await silentTokenRefresh();
+      if (refreshed) return driveReq(url, opts, true);
+    }
     STATE.drive.token = null;
     LS.del("drive_token");
     LS.del("drive_token_expiry");
@@ -1155,6 +1225,13 @@ async function driveReq(url, opts = {}, _retried = false) {
     },
   });
   if (res.status === 401 || res.status === 403) {
+    // Attempt silent refresh and retry once on auth failure
+    if (!_retried && LS.get("drive_connected") === "true") {
+      STATE.drive.token = null;
+      STATE.drive.tokenExpiry = null;
+      const refreshed = await silentTokenRefresh();
+      if (refreshed) return driveReq(url, opts, true);
+    }
     STATE.drive.token = null;
     STATE.drive.tokenExpiry = null;
     LS.del("drive_token");

@@ -257,7 +257,9 @@ async function boot() {
     if (STATE.drive.token && !isTokenExpired()) {
       STATE.drive.status = "synced";
     } else {
-      STATE.drive.status = LS.get("drive_connected") === "true" ? "synced" : "offline";
+      // Token missing or expired — don't falsely show "synced"
+      // Actual sync will attempt re-auth when vault is unlocked
+      STATE.drive.status = "offline";
     }
   } else {
     STATE.drive.status = "noconfig";
@@ -727,6 +729,7 @@ async function handlePinReset() {
   // Clear all biometric data since PIN changed
   LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
   LS.del("vault_bio_key"); LS.del("vault_bio_iv");
+  LS.del("vault_bio_asked");  // Allow re-offering biometric registration
   openApp();
   toast("PIN reset — Vault data was cleared for security", "warn");
 }
@@ -822,7 +825,13 @@ async function isBioAvailable() {
 }
 
 async function offerBioRegistration() {
-  if (LS.get("vault_bio_cred") || LS.get("vault_bio_asked")) return;
+  if (LS.get("vault_bio_cred")) return;  // Already registered
+  // Clear stale vault_bio_asked flag if bio credential was removed
+  // (e.g. after PIN reset or manual disable) so user gets re-offered
+  if (!LS.get("vault_bio_cred") && LS.get("vault_bio_asked") && !LS.get("vault_bio_key")) {
+    LS.del("vault_bio_asked");
+  }
+  if (LS.get("vault_bio_asked")) return;  // Already asked this session
   if (!await isBioAvailable()) return;
   LS.set("vault_bio_asked", "1");
   // Small delay so the main UI loads first
@@ -984,6 +993,7 @@ async function toggleBiometricSetting() {
       LS.del("vault_bio_key");
       LS.del("vault_bio_iv");
       LS.del("vault_bio_enc");
+      LS.del("vault_bio_asked");  // Allow re-offering biometric registration
       toast("Biometric unlock disabled", "info");
       renderBioSettings();
     }
@@ -1057,7 +1067,7 @@ async function connectDrive() {
   const gisLoaded = await waitForGIS(3000);
   if (!gisLoaded) {
     toast("Google Identity Services not ready yet", "error");
-    setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
+    setSyncStatus("offline");
     renderSyncBadge();
     return;
   }
@@ -1091,13 +1101,13 @@ async function connectDrive() {
           .then(data => { if (data && data.email) LS.set("drive_email", data.email); })
           .catch(() => {});
         } else {
-          setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
+          setSyncStatus("offline");
           renderSyncBadge();
         }
       },
       error_callback: (err) => {
         console.warn("[Vault] GIS auth error:", err);
-        setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
+        setSyncStatus("offline");
         renderSyncBadge();
       }
     });
@@ -1108,7 +1118,7 @@ async function connectDrive() {
     });
   } catch (e) {
     console.warn("[Vault] GIS token client initialization failed:", e);
-    setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
+    setSyncStatus("offline");
     renderSyncBadge();
   }
 }
@@ -1211,7 +1221,7 @@ async function driveReq(url, opts = {}, _retried = false) {
     STATE.drive.token = null;
     LS.del("drive_token");
     LS.del("drive_token_expiry");
-    STATE.drive.status = LS.get("drive_connected") === "true" ? "synced" : "error";
+    STATE.drive.status = "error";
     renderSyncBadge();
     renderDrivePanel();
     throw new Error("SESSION_EXPIRED");
@@ -1236,7 +1246,7 @@ async function driveReq(url, opts = {}, _retried = false) {
     STATE.drive.tokenExpiry = null;
     LS.del("drive_token");
     LS.del("drive_token_expiry");
-    STATE.drive.status = LS.get("drive_connected") === "true" ? "synced" : "error";
+    STATE.drive.status = "error";
     renderSyncBadge();
     renderDrivePanel();
     throw new Error("SESSION_EXPIRED");
@@ -1263,8 +1273,23 @@ async function syncDrive(silent = false) {
 
   const authed = await ensureDriveAuth();
   if (!authed) {
-    if (!silent) toast("Connect Drive first");
-    setSyncStatus(LS.get("drive_connected") === "true" ? "synced" : "offline");
+    // Auth failed — do NOT show "synced" status when sync didn't happen
+    if (LS.get("drive_connected") === "true") {
+      // Previously connected but token expired and silent refresh failed
+      // Show offline status so user knows sync isn't working
+      setSyncStatus("offline");
+      console.warn("[Vault] Drive auth failed — silent refresh unsuccessful. Attempting interactive re-auth...");
+      // Attempt interactive re-auth (GIS popup) if not silent
+      if (!silent) {
+        connectDrive();
+      } else {
+        // In silent mode, schedule a retry with connectDrive on next user interaction
+        toast("Drive session expired — tap sync badge to reconnect", "info");
+      }
+    } else {
+      setSyncStatus("offline");
+      if (!silent) toast("Connect Drive first");
+    }
     return false;
   }
 
@@ -1293,6 +1318,10 @@ async function syncDrive(silent = false) {
     setSyncStatus("error");
     if (e.message === "SESSION_EXPIRED") {
       if (!silent) toast("Drive session expired — reconnect", "error");
+      // Attempt interactive re-auth for session expiry
+      if (LS.get("drive_connected") === "true") {
+        connectDrive();
+      }
     } else {
       if (!silent) toast("Sync failed: " + e.message, "error");
     }

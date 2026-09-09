@@ -1,5 +1,5 @@
-const CACHE = "vault-pwa-v105";
-const SHELL = ["./", "./index.html", "./config.js?v=105", "./app.js?v=105", "./manifest.json", "./oauth_callback.html"];
+const CACHE = "vault-pwa-v106";
+const SHELL = ["./", "./index.html", "./config.js?v=106", "./app.js?v=106", "./manifest.json", "./oauth_callback.html"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

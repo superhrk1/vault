@@ -16,8 +16,25 @@ const $ = id => document.getElementById(id);
 const enc = s  => new TextEncoder().encode(s);
 const dec = b  => new TextDecoder().decode(b);
 const rnd = n  => crypto.getRandomValues(new Uint8Array(n));
-const b64e = u => btoa(String.fromCharCode(...u));
-const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const b64e = u => {
+  const bytes = (u instanceof Uint8Array) ? u : (ArrayBuffer.isView(u) ? new Uint8Array(u.buffer, u.byteOffset, u.byteLength) : new Uint8Array(u));
+  let binary = "";
+  const len = bytes.byteLength;
+  const CHUNK_SIZE = 0x8000;
+  for (let i = 0; i < len; i += CHUNK_SIZE) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+};
+const b64d = s => {
+  const bin = atob(s);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return bytes;
+};
 
 // ── SVG Icons for Card Actions ─────────────────────────────
 const SVGS = {
@@ -863,7 +880,7 @@ async function registerBiometric(pin) {
       }
     });
 
-    const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    const credId = b64e(credential.rawId);
     LS.set("vault_bio_cred", credId);
 
     // Encrypt PIN with AES-256-GCM (WebCrypto) — replaces the previous weak XOR
@@ -875,9 +892,9 @@ async function registerBiometric(pin) {
       new TextEncoder().encode(pin)
     );
     const rawKey  = await crypto.subtle.exportKey("raw", bioKey);
-    LS.set("vault_bio_key", btoa(String.fromCharCode(...new Uint8Array(rawKey))));
-    LS.set("vault_bio_iv",  btoa(String.fromCharCode(...bioIV)));
-    LS.set("vault_bio_enc", btoa(String.fromCharCode(...new Uint8Array(pinCT))));
+    LS.set("vault_bio_key", b64e(rawKey));
+    LS.set("vault_bio_iv",  b64e(bioIV));
+    LS.set("vault_bio_enc", b64e(pinCT));
     LS.del("vault_bio_nonce");   // remove legacy XOR field if present
 
     toast("Fingerprint unlock enabled", "success");
@@ -895,7 +912,7 @@ async function biometricUnlock() {
 
   try {
     const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const rawId = Uint8Array.from(atob(credId), c => c.charCodeAt(0));
+    const rawId = b64d(credId);
     const rpId  = location.hostname || "localhost";
 
     await navigator.credentials.get({
@@ -909,9 +926,9 @@ async function biometricUnlock() {
     });
 
     // Biometric succeeded — recover PIN using AES-GCM decryption
-    const rawKey = Uint8Array.from(atob(LS.get("vault_bio_key")), c => c.charCodeAt(0));
-    const bioIV  = Uint8Array.from(atob(LS.get("vault_bio_iv")),  c => c.charCodeAt(0));
-    const pinCT  = Uint8Array.from(atob(LS.get("vault_bio_enc")), c => c.charCodeAt(0));
+    const rawKey = b64d(LS.get("vault_bio_key"));
+    const bioIV  = b64d(LS.get("vault_bio_iv"));
+    const pinCT  = b64d(LS.get("vault_bio_enc"));
     const bioKey = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
     const pinBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bioIV }, bioKey, pinCT);
     const pin = new TextDecoder().decode(pinBuf);

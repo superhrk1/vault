@@ -46,6 +46,29 @@ const SVGS = {
   edit: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   trash: `<svg class="cab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`
 };
+
+// ── SVG Icons for item types & inline controls ─────────────
+const _svg = body => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const T_SVG = {
+  password: _svg(`<circle cx="8" cy="15" r="4.5"/><path d="M11.2 11.8L20 3"/><path d="M16.5 6.5L19 9"/><path d="M14.5 8.5L16.5 10.5"/>`),
+  bookmark: _svg(`<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z"/>`),
+  note:     _svg(`<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/>`),
+  todo:     _svg(`<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12l3 3 5-6"/>`),
+  all:      _svg(`<rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>`),
+};
+const UI_SVG = {
+  chev:   _svg(`<path d="M6 9l6 6 6-6"/>`),
+  copy:   _svg(`<rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>`),
+  eye:    _svg(`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
+  eyeOff: _svg(`<path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.2 3.2M6.6 6.6A17 17 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="M3 3l18 18"/>`),
+  edit:   _svg(`<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>`),
+  trash:  _svg(`<path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`),
+  up:     _svg(`<path d="M18 15l-6-6-6 6"/>`),
+  down:   _svg(`<path d="M6 9l6 6 6-6"/>`),
+  home:   _svg(`<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>`),
+  filter: _svg(`<path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/>`),
+  plus:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`,
+};
 const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const vibrate = ms => { try { navigator?.vibrate?.(ms); } catch {} };
@@ -355,6 +378,18 @@ function numpadBack() {
   if (btn) btn.classList.add("dim");
 }
 
+// Physical keyboard support for the PIN pad (desktop / tablets with keyboards)
+document.addEventListener("keydown", e => {
+  const lock = $("lock");
+  if (!lock || lock.classList.contains("gone")) return;
+  if ($("pin-entry")?.style.display === "none") return;
+  if (e.target.closest?.("input, textarea, select")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); numpadPress(e.key); }
+  else if (e.key === "Backspace" || e.key === "Escape") { e.preventDefault(); numpadBack(); }
+  else if (e.key === "Enter") { e.preventDefault(); handlePinSubmit(); }
+});
+
 function renderPinDots() {
   const el = $("pin-dots");
   if (!el) return;
@@ -510,6 +545,8 @@ function openApp() {
 
 function lockVault() {
   toggleSettings(false);
+  closeOverlay("add-overlay");
+  closeOverlay("confirm-overlay");
   if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
   if (_autoSyncInterval) { clearInterval(_autoSyncInterval); _autoSyncInterval = null; }
   STATE.masterKey = null; STATE.items = []; STATE.expandedId = null; STATE.pwVisible = {};
@@ -778,13 +815,19 @@ function renderSQSettings() {
       <div class="sq-set-ico">🛡️</div>
       <div class="sq-set-info">
         <div class="sq-set-name">${esc(question)}</div>
-        <div class="sq-set-sub">Recovery method active ✓</div>
+        <div class="sq-set-sub">Secret question is set</div>
       </div>
       <div class="set-act" onclick="openChangeSQ()">Change</div>
     </div></div>`;
   } else {
-    panel.innerHTML = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">No secret question set. Set one to recover your vault if you forget your PIN.</div>
-      <button class="btn primary" style="padding:11px" onclick="openChangeSQ()">Set Secret Question</button>`;
+    panel.innerHTML = `<div class="sq-set-card"><div class="sq-set-row">
+      <div class="sq-set-ico">🛡️</div>
+      <div class="sq-set-info">
+        <div class="sq-set-name">No secret question</div>
+        <div class="sq-set-sub">Set one so you can recover a forgotten PIN</div>
+      </div>
+      <div class="set-act" onclick="openChangeSQ()">Set up</div>
+    </div></div>`;
   }
 }
 
@@ -813,7 +856,7 @@ function openChangeSQ() {
     <div class="fg">
       <div class="fl">Your Answer *</div>
       <input class="fi" id="sq-ch-answer" placeholder="Type your answer…">
-      <div style="font-size:10px;color:var(--faint)">Answer is case-insensitive</div>
+      <div class="fhint">Not case-sensitive</div>
     </div>`;
   foot.innerHTML = `
     <button class="btn ghost" onclick="closeOverlay('add-overlay')">Cancel</button>
@@ -2509,38 +2552,47 @@ function filtered() {
   return r;
 }
 
-function renderList() {
+function renderList(opts = {}) {
   const area = $("list");
   const list = filtered();
+  // In-place refreshes (fav, todo check, reveal) keep scroll position and skip entry animations
+  area.classList.toggle("no-anim", !!opts.keepScroll);
   // Update FAB pulse based on items
   updateFabPulse();
   if (!list.length) {
-    const icons = { all:"🔐", password:"🔑", todo:"✅", bookmark:"🔖", note:"📝" };
-    const labels = { all:"item", password:"password", todo:"todo", bookmark:"bookmark", note:"note" };
-    const hint = STATE.activeTags.length
-      ? "No items match the selected tags."
-      : "Your vault is empty — let's add something!";
+    STATE.currentFilteredList = [];
+    const labels ={ all:"item", password:"password", todo:"todo", bookmark:"bookmark", note:"note" };
+    const q = ($("q")?.value || "").trim();
+    const isFiltering = !!(q || STATE.activeTags.length || STATE.favOnly || STATE.typeFilter);
+    const title = isFiltering ? "No matches" : "Nothing here yet";
+    const hint = q
+      ? `Nothing matches “${esc(q)}”. Try another word${STATE.deepSearch ? "" : " or turn on Deep search"}.`
+      : isFiltering
+        ? "No items match the current filters."
+        : "Your vault is empty. Add your first item to get started.";
     const actionLabel = STATE.tab === "all" ? "Add your first item" : `Add a ${labels[STATE.tab]||'item'}`;
     area.innerHTML = `<div class="empty">
-      <div class="empty-ico">${icons[STATE.tab]||"🔐"}</div>
-      <div class="empty-title">Nothing here yet</div>
+      <div class="empty-ico">${isFiltering ? UI_SVG.filter : (T_SVG[STATE.tab] || T_SVG.all)}</div>
+      <div class="empty-title">${title}</div>
       <div class="empty-sub">${hint}</div>
-      ${!STATE.activeTags.length ? `<div class="empty-action" onclick="openAdd()">＋ ${actionLabel}</div>` : ''}
+      ${!isFiltering ? `<div class="empty-action" onclick="openAdd()">${UI_SVG.plus}${actionLabel}</div>` : ''}
     </div>`;
     return;
   }
   
   STATE.currentFilteredList = list;
-  STATE.renderLimit = 50;
-  
+  if (!opts.keepScroll) STATE.renderLimit = 50;
+
+  const prevScroll = area.scrollTop;
   const itemsToRender = list.slice(0, STATE.renderLimit);
   area.innerHTML = itemsToRender.map(cardHTML).join("");
-  area.scrollTop = 0;
+  area.scrollTop = opts.keepScroll ? prevScroll : 0;
 }
 
 function renderMoreListItems() {
   const area = $("list");
   if (!area) return;
+  area.classList.add("no-anim");
   const itemsToRender = STATE.currentFilteredList.slice(0, STATE.renderLimit);
   area.innerHTML = itemsToRender.map(cardHTML).join("");
 }
@@ -2554,27 +2606,23 @@ function renderAll() {
 function cardHTML(item) {
   if (item.type === "todo") return todoCardHTML(item);
   const q = ($("q")?.value || "").toLowerCase().trim();
-  const ico  = T_ICON[item.type]  || "📄";
+  const ico  = T_SVG[item.type]   || T_SVG.note;
   const cls  = T_CLASS[item.type] || "ip";
   const ccls = {password:"card-pw",bookmark:"card-bm",note:"card-nt"}[item.type] || "";
-  const sub  = item.username || item.url || (item.note||"").slice(0,55) || "";
-  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${highlightMatch(t, q)}</span>`).join("");
-  const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
-  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : item.priority === "medium" ? `<span class="bpill bpm">◉</span>` : item.priority === "low" ? `<span class="bpill bpl">▽</span>` : "";
+  const sub  = item.username || item.url || (item.note||"").slice(0,80) || "";
+  const subMono = !!(item.username || item.url);
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
-
-  const ago = getItemAge(item);
 
   return `<div class="card ${ccls}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
       <div class="ci ${cls}">${ico}</div>
       <div class="cm">
-        <div class="ct">${highlightMatch(item.title||"Untitled", q)}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
-        <div class="cs">${highlightMatch(sub, q)}</div>
+        <div class="ct"><span class="ct-name">${highlightMatch(item.title||"Untitled", q)}</span></div>
+        ${sub ? `<div class="cs${subMono ? " mono" : ""}">${highlightMatch(sub, q)}</div>` : ""}
+        <div class="cbadges">${cardBadges(item, q)}</div>
       </div>
-      <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
-      <div class="chev">⌄</div>
+      <div class="chev">${UI_SVG.chev}</div>
     </div>
     <div class="card-drawer">
       <div class="card-drawer-inner">
@@ -2593,9 +2641,6 @@ function todoCardHTML(item) {
   const total = subs.length;
   const colorClass = item.color ? " color-" + item.color : "";
   const colorHex = (TODO_COLORS.find(c => c.name === item.color) || TODO_COLORS[6]).hex;
-  const tags = (item.tags||[]).slice(0,2).map(t => `<span class="bpill bt">#${highlightMatch(t, q)}</span>`).join("");
-  const fav  = item.fav ? `<span class="bpill bf">★</span>` : "";
-  const pri  = item.priority === "high" ? `<span class="bpill bpp">⚡</span>` : "";
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
@@ -2611,17 +2656,15 @@ function todoCardHTML(item) {
   const noteBlock = item.note ? `<div class="note-block">${highlightMatch(item.note, q).replace(/\n/g,"<br>")}</div>` : "";
   const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${highlightMatch(t, q)}</span>`).join("")}</div>` : "";
 
-  const ago = getItemAge(item);
-
   return `<div class="card card-td todo-card${colorClass}${exp?" open":""}" id="card-${id}">
     <div class="card-top" onclick="toggleCard('${id}')">
-      <div class="ci it">✅</div>
+      <div class="ci it">${T_SVG.todo}</div>
       <div class="cm">
-        <div class="ct"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorHex};margin-right:6px;vertical-align:middle"></span>${highlightMatch(item.title||"Untitled", q)}${ago ? `<span class="ct-ago">${ago}</span>` : ""}</div>
-        <div class="cs">${done} of ${total} completed</div>
+        <div class="ct"><span class="ct-dot" style="background:${colorHex}"></span><span class="ct-name">${highlightMatch(item.title||"Untitled", q)}</span></div>
+        <div class="cs">${total ? `${done} of ${total} done` : "No sub-items yet"}</div>
+        <div class="cbadges">${cardBadges(item, q)}</div>
       </div>
-      <div class="cbadges">${getFlagBadge(item)}${pri}${fav}${tags}</div>
-      <div class="chev">⌄</div>
+      <div class="chev">${UI_SVG.chev}</div>
     </div>
     <div class="card-drawer">
       <div class="card-drawer-inner">
@@ -2650,7 +2693,18 @@ async function toggleTodoDone(itemId, subId) {
   if (!sub) return;
   sub.done = !sub.done;
   await saveItem(item);
-  renderList();
+  renderList({ keepScroll: true });
+}
+
+function cardBadges(item, q) {
+  const PRI = { high:["bpp","High"], medium:["bpm","Medium"], low:["bpl","Low"] };
+  const pri  = PRI[item.priority] ? `<span class="bpill ${PRI[item.priority][0]}">${PRI[item.priority][1]}</span>` : "";
+  const fav  = item.fav ? `<span class="bpill bf">★ Fav</span>` : "";
+  const all  = item.tags || [];
+  const tags = all.slice(0,2).map(t => `<span class="bpill bt">#${highlightMatch(t, q)}</span>`).join("")
+             + (all.length > 2 ? `<span class="bpill bt">+${all.length - 2}</span>` : "");
+  const ago  = getItemAge(item);
+  return `${getFlagBadge(item)}${pri}${fav}${tags}${ago ? `<span class="ct-ago">${ago}</span>` : ""}`;
 }
 
 function getFlagBadge(item) {
@@ -2678,8 +2732,8 @@ function detailHTML(item) {
     h += `<div class="dr">
       <span class="dl">PASS</span>
       <span class="dv${vis?"":" masked"}" id="dv-pw-${id}">${vis ? esc(item.password) : "••••••••••"}</span>
-      <span class="da" onclick="togglePwVis('${id}')" id="eye-${id}">${vis?"🙈":"👁"}</span>
-      <span class="da" onclick="copyVal('${id}','password')" title="Copy">⎘</span>
+      <span class="da" onclick="togglePwVis('${id}')" id="eye-${id}" title="${vis?"Hide":"Show"}">${vis ? UI_SVG.eyeOff : UI_SVG.eye}</span>
+      <span class="da" onclick="copyVal('${id}','password')" title="Copy">${UI_SVG.copy}</span>
     </div>`;
   }
 
@@ -2708,7 +2762,7 @@ function dRow(label, val, copyFn="") {
   return `<div class="dr">
     <span class="dl">${label}</span>
     <span class="dv">${val}</span>
-    ${copyFn ? `<span class="da" onclick="${copyFn}" title="Copy">⎘</span>` : ""}
+    ${copyFn ? `<span class="da" onclick="${copyFn}" title="Copy">${UI_SVG.copy}</span>` : ""}
   </div>`;
 }
 
@@ -2754,7 +2808,14 @@ function toggleCard(id) {
 
 function togglePwVis(id) {
   STATE.pwVisible[id] = !STATE.pwVisible[id];
-  renderList();
+  const vis = STATE.pwVisible[id];
+  const item = STATE.items.find(i => i.id === id);
+  const dv = $("dv-pw-" + id), eye = $("eye-" + id);
+  if (!item || !dv || !eye) { renderList({ keepScroll: true }); return; }
+  dv.textContent = vis ? item.password : "••••••••••";
+  dv.classList.toggle("masked", !vis);
+  eye.innerHTML = vis ? UI_SVG.eyeOff : UI_SVG.eye;
+  eye.title = vis ? "Hide" : "Show";
 }
 
 async function copyVal(id, field) {
@@ -2819,7 +2880,7 @@ async function toggleFav(id) {
   if (!item) return;
   item.fav = !item.fav;
   await saveItem(item);
-  renderList();
+  renderList({ keepScroll: true });
   // Star burst animation
   if (item.fav) {
     vibrate(30);
@@ -2876,59 +2937,59 @@ function buildForm(type, pre) {
 
   const typeGrid = pre ? "" : `
     <div class="fg">
-      <div class="fl">Type</div>
       <div class="type-grid">
-        <div class="tcard${type==="password"?" on":""}" onclick="switchType('password',this)"><span class="tci">🔑</span>Password</div>
-        <div class="tcard${type==="bookmark"?" on":""}" onclick="switchType('bookmark',this)"><span class="tci">🔖</span>Bookmark</div>
-        <div class="tcard${type==="note"?" on":""}" onclick="switchType('note',this)"><span class="tci">📝</span>Note</div>
-        <div class="tcard${type==="todo"?" on":""}" onclick="switchType('todo',this)"><span class="tci">✅</span>Todo</div>
+        <div class="tcard${type==="password"?" on":""}" onclick="switchType('password',this)"><span class="tci">${T_SVG.password}</span>Password</div>
+        <div class="tcard${type==="bookmark"?" on":""}" onclick="switchType('bookmark',this)"><span class="tci">${T_SVG.bookmark}</span>Bookmark</div>
+        <div class="tcard${type==="note"?" on":""}" onclick="switchType('note',this)"><span class="tci">${T_SVG.note}</span>Note</div>
+        <div class="tcard${type==="todo"?" on":""}" onclick="switchType('todo',this)"><span class="tci">${T_SVG.todo}</span>Todo</div>
       </div>
-    </div><div class="divider"></div>`;
+    </div>`;
 
   let fields = "";
   if (type === "password") {
     fields = `
-      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Gmail, Netflix…" value="${esc(pre?.title||"")}" autocomplete="off"></div>
-      <div class="fg"><div class="fl">Username / Email</div><input class="fi" id="f-username" placeholder="user@example.com" value="${esc(pre?.username||"")}" autocomplete="off"></div>
+      <div class="fg"><div class="fl">Title</div><input class="fi" id="f-title" placeholder="Gmail, Netflix…" value="${esc(pre?.title||"")}" autocomplete="off" enterkeyhint="next"></div>
+      <div class="fg"><div class="fl">Username or email</div><input class="fi" id="f-username" placeholder="user@example.com" value="${esc(pre?.username||"")}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="next"></div>
       <div class="fg"><div class="fl">Password</div>
-        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password" oninput="updateStrBar(this.value)">
-        <span class="pweye" onclick="tpw('f-password')">👁</span></div>
+        <div class="pw-wrap"><input class="fi mono" id="f-password" type="password" placeholder="••••••••" value="${esc(pre?.password||"")}" autocomplete="new-password" autocapitalize="off" spellcheck="false" oninput="updateStrBar(this.value)">
+        <span class="pweye" onclick="tpw('f-password')" title="Show / hide">${UI_SVG.eye}</span></div>
         <div class="str-bar"><div class="str-fill" id="str-fill"></div></div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
-          <span class="gen-pill on" id="gp-upper" onclick="toggleGenPill(this,'upper')">A–Z</span>
-          <span class="gen-pill on" id="gp-lower" onclick="toggleGenPill(this,'lower')">a–z</span>
-          <span class="gen-pill on" id="gp-num" onclick="toggleGenPill(this,'num')">0–9</span>
-          <span class="gen-pill on" id="gp-sym" onclick="toggleGenPill(this,'sym')">!@#</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <span style="font-size:11px;color:var(--muted);white-space:nowrap">Length: <b id="gen-len-val">20</b></span>
-          <input type="range" min="8" max="64" value="20" id="gen-len" oninput="$('gen-len-val').textContent=this.value" style="flex:1;accent-color:var(--ac)">
-        </div>
-        <div style="display:flex;gap:8px;margin-top:6px">
-          <button type="button" class="btn primary" style="padding:8px 14px;font-size:12px;flex:1" onclick="genInlinePw()">🎲 Generate</button>
-          <button type="button" class="btn ghost" style="padding:8px 14px;font-size:12px;flex:0 0 auto" onclick="copyInlinePw()">📋 Copy</button>
+        <div class="gen-box">
+          <div class="gen-pills">
+            <span class="gen-pill${_genOpts.upper?" on":""}" id="gp-upper" onclick="toggleGenPill(this,'upper')">A–Z</span>
+            <span class="gen-pill${_genOpts.lower?" on":""}" id="gp-lower" onclick="toggleGenPill(this,'lower')">a–z</span>
+            <span class="gen-pill${_genOpts.num?" on":""}" id="gp-num" onclick="toggleGenPill(this,'num')">0–9</span>
+            <span class="gen-pill${_genOpts.sym?" on":""}" id="gp-sym" onclick="toggleGenPill(this,'sym')">!@#</span>
+          </div>
+          <label class="gen-len">Length <b id="gen-len-val">20</b>
+            <input type="range" min="8" max="64" value="20" id="gen-len" oninput="$('gen-len-val').textContent=this.value">
+          </label>
+          <div class="gen-actions">
+            <button type="button" class="btn primary" onclick="genInlinePw()">Generate password</button>
+            <button type="button" class="btn ghost" style="flex:0 0 auto" onclick="copyInlinePw()">${UI_SVG.copy.replace("<svg ", '<svg width="18" height="18" ')}Copy</button>
+          </div>
         </div>
       </div>
-      <div class="fg"><div class="fl">Website URL</div><input class="fi" id="f-url" type="url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
+      <div class="fg"><div class="fl">Website</div><input class="fi" id="f-url" type="url" inputmode="url" placeholder="https://" value="${esc(pre?.url||"")}" autocapitalize="off" spellcheck="false"></div>
       <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "bookmark") {
     fields = `
-      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Bookmark name" value="${esc(pre?.title||"")}"></div>
-      <div class="fg"><div class="fl">URL *</div><input class="fi" id="f-url" type="url" placeholder="https://" value="${esc(pre?.url||"")}"></div>
+      <div class="fg"><div class="fl">Title</div><input class="fi" id="f-title" placeholder="Bookmark name" value="${esc(pre?.title||"")}" enterkeyhint="next"></div>
+      <div class="fg"><div class="fl">URL</div><input class="fi" id="f-url" type="url" inputmode="url" placeholder="https://" value="${esc(pre?.url||"")}" autocapitalize="off" spellcheck="false"></div>
       <div class="fg"><div class="fl">Description</div><textarea class="fi" id="f-note" placeholder="What's this link about?">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "note") {
     fields = `
-      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Note title" value="${esc(pre?.title||"")}"></div>
-      <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:140px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
+      <div class="fg"><div class="fl">Title</div><input class="fi" id="f-title" placeholder="Note title" value="${esc(pre?.title||"")}" enterkeyhint="next"></div>
+      <div class="fg"><div class="fl">Content</div><textarea class="fi" id="f-note" style="min-height:180px" placeholder="Write your note…">${esc(pre?.note||"")}</textarea></div>`;
   } else if (type === "todo") {
     const subItems = STATE.mSubitems.map((s,i) =>
-      `<div class="subitem-row"><span class="sub-drag">⋮⋮</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Sub-item…" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})">✕</span></div>`
+      `<div class="subitem-row"><span class="sub-drag">○</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Checklist item" enterkeyhint="next" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubitem()}" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})" aria-label="Remove">✕</span></div>`
     ).join("");
     fields = `
-      <div class="fg"><div class="fl">Title *</div><input class="fi" id="f-title" placeholder="Todo title" value="${esc(pre?.title||"")}" autocomplete="off"></div>
-      <div class="fg"><div class="fl">Sub-items</div>
+      <div class="fg"><div class="fl">Title</div><input class="fi" id="f-title" placeholder="Todo title" value="${esc(pre?.title||"")}" autocomplete="off"></div>
+      <div class="fg"><div class="fl">Checklist</div>
         <div id="subitems-list">${subItems}</div>
-        <div class="add-sub-btn" onclick="addSubitem()">＋ Add Sub-item</div>
+        <div class="add-sub-btn" onclick="addSubitem()">＋ Add item</div>
       </div>
       <div class="fg"><div class="fl">Notes</div><textarea class="fi" id="f-note" placeholder="Optional notes…">${esc(pre?.note||"")}</textarea></div>`;
   }
@@ -2946,37 +3007,39 @@ function buildForm(type, pre) {
 
   const flagBlock = `
     <div class="fg">
-      <div class="fl">Flag / Expires</div>
-      <input class="fi" id="f-flagDate" type="date" value="${esc(pre?.flagDate||"")}" style="color-scheme:dark">
-      <div style="font-size:11px;color:var(--faint);margin-top:3px">Optional — item will show an expiry countdown on cards</div>
+      <div class="fl">Due / expiry date</div>
+      <input class="fi" id="f-flagDate" type="date" value="${esc(pre?.flagDate||"")}">
+      <div class="fhint">Optional. Shows a countdown badge on the card.</div>
     </div>`;
 
   const tagsBlock = `
     <div class="fg">
       <div class="fl">Tags</div>
       <div class="tag-add-row">
-        <input class="fi" id="tag-inp" placeholder="Add a tag…" onkeydown="onFormTagKeyDown(event, this)" oninput="onFormTagInput(this)" autocomplete="off">
-        <button class="tadd-btn" onclick="addTag()">+ Add</button>
+        <input class="fi" id="tag-inp" placeholder="Add a tag" onkeydown="onFormTagKeyDown(event, this)" oninput="onFormTagInput(this)" autocomplete="off" autocapitalize="off" enterkeyhint="done">
+        <button class="tadd-btn" onclick="addTag()">Add</button>
       </div>
-      <div id="form-tag-autocomplete" class="chips" style="display:none; margin-top:8px;"></div>
-      <div class="chips" id="mchips" style="margin-top:8px">${renderChips()}</div>
+      <div id="form-tag-autocomplete" class="chips" style="display:none"></div>
+      <div class="chips" id="mchips">${renderChips()}</div>
     </div>`;
 
   const dashBlock = `
-    <div class="fg">
-      <div class="fl">Display on home</div>
+    <div class="fg form-toggle">
       <div class="dash-toggle-row">
         <div class="dash-toggle-info">
-          <span style="font-size:16px">📊</span>
-          <span style="font-size:12px;color:var(--muted)">Show item on Home screen</span>
+          <span class="set-group-ico ico-ac">${UI_SVG.home}</span>
+          <div>
+            <div class="set-group-name">Show on Home</div>
+            <div class="set-group-sub">Pin this item to your daily Home list</div>
+          </div>
         </div>
-        <div class="dash-switch${STATE.mDashboard ? ' on' : ''}" id="f-dash-switch" onclick="toggleDashSwitch()">
+        <div class="dash-switch${STATE.mDashboard ? ' on' : ''}" id="f-dash-switch" onclick="toggleDashSwitch()" role="switch">
           <div class="dash-switch-knob"></div>
         </div>
       </div>
-      <div id="f-cloud-kw-wrap" style="display:${STATE.mDashboard ? 'block' : 'none'}; margin-top:10px;">
-        <input class="fi" id="f-cloudKeyword" placeholder="Short keyword for clouds (e.g. Bank)" value="${esc(pre?.cloudKeyword||"")}">
-        <div style="font-size:11px;color:var(--faint);margin-top:3px">If empty, this item won't show in the keyword clouds.</div>
+      <div id="f-cloud-kw-wrap" style="display:${STATE.mDashboard ? 'block' : 'none'}; margin-top:6px;">
+        <input class="fi" id="f-cloudKeyword" placeholder="Cloud keyword, e.g. Bank" value="${esc(pre?.cloudKeyword||"")}">
+        <div class="fhint" style="margin-top:6px">Optional. Adds a quick-tap word to the Home keyword cloud.</div>
       </div>
     </div>`;
 
@@ -3015,6 +3078,8 @@ function switchType(type, el) {
 function tpw(id) {
   const el = $(id);
   el.type  = el.type === "password" ? "text" : "password";
+  const eye = el.parentElement?.querySelector(".pweye");
+  if (eye) eye.innerHTML = el.type === "password" ? UI_SVG.eye : UI_SVG.eyeOff;
 }
 
 function updateStrength() {
@@ -3047,12 +3112,21 @@ function genInlinePw() {
   if (_genOpts.sym)   chars += "!@#$%^&*()-_=+[]{}|;:,.<>?";
   if (!chars) chars = "abcdefghijklmnopqrstuvwxyz";
   const len = +($("gen-len")?.value || 20);
+  // Cryptographically secure, unbiased selection (rejection sampling)
+  const limit = 256 - (256 % chars.length);
   let pw = "";
-  for (let i = 0; i < len; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  while (pw.length < len) {
+    for (const b of rnd(len * 2)) {
+      if (b < limit) pw += chars[b % chars.length];
+      if (pw.length === len) break;
+    }
+  }
   const el = $("f-password");
   if (el) {
     el.value = pw;
     el.type = "text";
+    const eye = el.parentElement?.querySelector(".pweye");
+    if (eye) eye.innerHTML = UI_SVG.eyeOff;
     updateStrength();
   }
   toast("Password generated", "success");
@@ -3300,7 +3374,7 @@ function refreshSubitems() {
   const el = $("subitems-list");
   if (!el) return;
   el.innerHTML = STATE.mSubitems.map((s,i) =>
-    `<div class="subitem-row"><span class="sub-drag">⋮⋮</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Sub-item…" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})">✕</span></div>`
+    `<div class="subitem-row"><span class="sub-drag">○</span><input class="sub-input" id="sub-${i}" value="${esc(s.text)}" placeholder="Checklist item" enterkeyhint="next" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubitem()}" oninput="STATE.mSubitems[${i}].text=this.value"><span class="sub-del" onclick="removeSubitem(${i})" aria-label="Remove">✕</span></div>`
   ).join("");
 }
 
@@ -3519,13 +3593,14 @@ function updateStats() {
 
 async function changeMasterPw() {
   const nw = $("new-pw").value.trim();
-  if (nw.length < 4) { toast("Min 4 characters"); return; }
+  if (!/^\d{4,12}$/.test(nw)) { toast("PIN must be 4–12 digits", "warn"); return; }
   STATE.masterKey = nw;
+  SS.set("vault_session_key", nw);
   await persistItems();
   LS.set("vault_hash", await Crypto.hashPassword(nw));
   $("new-pw").value = "";
   if (STATE.drive.token) triggerSync();
-  toast("Master password updated", "success");
+  toast("PIN updated", "success");
 }
 
 function clearAll() {
@@ -3544,7 +3619,7 @@ function clearAll() {
 
 function setSort(val, el) {
   STATE.sort = val;
-  document.querySelectorAll(".sort-chip").forEach(c => c.classList.remove("on"));
+  document.querySelectorAll("#sort-row .sort-chip").forEach(c => c.classList.remove("on"));
   el.classList.add("on");
   renderList();
   toast("Sort updated", "info");
@@ -3728,19 +3803,21 @@ function renderDashboard() {
   const total = allDash.length, doneN = completed.length, pendN = pending.length;
   const pct = total ? Math.round(doneN / total * 100) : 0;
   const dateStr = new Date().toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
-  const r = 23, circ = 2*Math.PI*r, offset = circ - (pct/100)*circ;
+  const r = 25, circ = 2*Math.PI*r, offset = circ - (pct/100)*circ;
+  const hr = new Date().getHours();
+  const greeting = hr < 5 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
 
   let html = `<div class="dash-header">
     <div class="dash-ring">
-      <svg width="56" height="56" viewBox="0 0 56 56">
-        <circle class="dash-ring-bg" cx="28" cy="28" r="${r}" fill="none" stroke-width="5"/>
-        <circle class="dash-ring-fg" cx="28" cy="28" r="${r}" fill="none" stroke-width="5"
+      <svg viewBox="0 0 60 60">
+        <circle class="dash-ring-bg" cx="30" cy="30" r="${r}" fill="none" stroke-width="6"/>
+        <circle class="dash-ring-fg" cx="30" cy="30" r="${r}" fill="none" stroke-width="6"
           stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
       </svg>
       <div class="dash-ring-txt">${pct}%</div>
     </div>
     <div class="dash-info">
-      <div class="dash-title">Home</div>
+      <div class="dash-title">${greeting}</div>
       <div class="dash-date">${dateStr}</div>
       <div class="dash-pills">
         <span class="dash-pill pending">${pendN} Pending</span>
@@ -3752,43 +3829,43 @@ function renderDashboard() {
   const cloudItems = STATE.items.filter(item => !item.deleted && item.dashboard && item.cloudKeyword && item.cloudKeyword.trim() !== "");
   if (cloudItems.length > 0) {
     const colors = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
-    let cloudHtml = `<div class="kw-cloud-container" style="margin:20px 24px; padding:24px; background:rgba(var(--s1-rgb), 0.55); border-radius:24px; text-align:center;">
-      <div style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-items:center;">`;
+    let cloudHtml = `<div class="kw-cloud-container">`;
     cloudItems.forEach(item => {
        let size = 18;
-       if (item.priority === "high") size = 32;
-       else if (item.priority === "medium") size = 24;
-       else if (item.priority === "low") size = 14;
+       if (item.priority === "high") size = 28;
+       else if (item.priority === "medium") size = 22;
+       else if (item.priority === "low") size = 15;
        const dispStr = item.cloudKeyword.trim();
        const randColor = colors[(dispStr.length * 7) % colors.length];
        const pseudoRand = (dispStr.length * 13) % 10;
        cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand('${item.id}')">${esc(dispStr)}</span>`;
     });
-    cloudHtml += `</div></div>`;
+    cloudHtml += `</div>`;
     html += cloudHtml;
   }
 
   if (!allDash.length) {
     html += `<div class="dash-empty">
-      <div class="dash-empty-ico">📋</div>
-      <div class="dash-empty-msg">No items on your Home page yet.<br>Toggle "Display on home" when creating items.</div>
+      <div class="dash-empty-ico">${UI_SVG.home}</div>
+      <div class="empty-title">Your Home is empty</div>
+      <div class="dash-empty-msg">Turn on <b>Show on Home</b> when adding or editing an item to pin it here.</div>
+      <div class="empty-action" onclick="openAdd()">${UI_SVG.plus}Add an item</div>
     </div>`;
     el.innerHTML = html; return;
   }
 
   if (pending.length) {
-    html += `<div class="dash-sec-label">⏳ Pending · ${pendN}</div>`;
+    html += `<div class="dash-sec-label">To do <span class="cnt">${pendN}</span></div>`;
     pending.forEach((item,idx) => { html += dashCardHTML(item,false,idx,pending.length); });
   }
   if (completed.length) {
-    html += `<div class="dash-sec-label">✅ Completed · ${doneN}</div>`;
+    html += `<div class="dash-sec-label">Done today <span class="cnt">${doneN}</span></div>`;
     completed.forEach(item => { html += dashCardHTML(item,true,-1,-1); });
   }
   el.innerHTML = html;
 }
 
 function dashCardHTML(item, isDone, idx, total) {
-  const TSUB = {password:"🔑",bookmark:"🔖",note:"📝",todo:"✅"};
   const DCLS = {password:"dc-pw",bookmark:"dc-bm",note:"dc-nt",todo:"dc-td"};
   const sub = item.type==="todo"
     ? `${(item.subitems||[]).filter(s=>s.done).length}/${(item.subitems||[]).length} sub-items`
@@ -3798,11 +3875,11 @@ function dashCardHTML(item, isDone, idx, total) {
 
   let arrows = "";
   if (!isDone && total > 1) {
-    const upSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>`;
-    const dnSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    const upSvg = UI_SVG.up.replace("<svg ", '<svg width="14" height="14" ');
+    const dnSvg = UI_SVG.down.replace("<svg ", '<svg width="14" height="14" ');
     arrows = `<div class="dcard-arrows">
-      <button class="darr" onclick="event.stopPropagation();dashMoveUp('${item.id}')"${idx===0?' style="visibility:hidden"':''}>${upSvg}</button>
-      <button class="darr" onclick="event.stopPropagation();dashMoveDown('${item.id}')"${idx===total-1?' style="visibility:hidden"':''}>${dnSvg}</button>
+      <button class="darr" aria-label="Move up" onclick="event.stopPropagation();dashMoveUp('${item.id}')"${idx===0?' style="visibility:hidden"':''}>${upSvg}</button>
+      <button class="darr" aria-label="Move down" onclick="event.stopPropagation();dashMoveDown('${item.id}')"${idx===total-1?' style="visibility:hidden"':''}>${dnSvg}</button>
     </div>`;
   }
 
@@ -3810,11 +3887,11 @@ function dashCardHTML(item, isDone, idx, total) {
     <div class="dcard-top" onclick="dashToggleExpand('${item.id}')">
       <div class="dcheck${isDone?" checked":""}" onclick="event.stopPropagation();dashToggleDone('${item.id}')">${isDone?"✓":""}</div>
       <div class="dcard-mid">
-        <div class="dcard-title">${TSUB[item.type]||"📄"} ${esc(item.title||"Untitled")}${ago?` <span class="ct-ago">${ago}</span>`:""}</div>
-        <div class="dcard-sub">${esc(sub)}</div>
+        <div class="dcard-title"><span class="dt-ico">${T_SVG[item.type]||T_SVG.note}</span><span class="dt-name">${esc(item.title||"Untitled")}</span></div>
+        <div class="dcard-sub">${esc(sub)}${sub && ago ? " · " : ""}${ago}</div>
       </div>
       ${arrows}
-      <div class="dcard-expand">⌄</div>
+      <div class="dcard-expand">${UI_SVG.chev}</div>
     </div>
     ${isExp?`<div class="dcard-detail">${dashDetailHTML(item)}</div>`:""}
   </div>`;
@@ -3830,9 +3907,8 @@ function dashDetailHTML(item) {
   if (item.type==="todo" && Array.isArray(item.subitems) && item.subitems.length) {
     h += `<div style="margin-bottom:6px">`;
     item.subitems.forEach(s => {
-      h += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer" onclick="event.stopPropagation();toggleTodoDone('${item.id}','${s.id}');setTimeout(renderDashboard,100)">
-        <span style="color:${s.done?'var(--green)':'var(--faint)'}">${s.done?'✓':'○'}</span>
-        <span style="${s.done?'text-decoration:line-through;color:var(--faint)':'color:var(--tx)'}">${esc(s.text)}</span>
+      h += `<div class="dd-sub${s.done?' done':''}" onclick="event.stopPropagation();toggleTodoDone('${item.id}','${s.id}');setTimeout(renderDashboard,100)">
+        <span class="mk">✓</span><span class="tx">${esc(s.text)}</span>
       </div>`;
     });
     h += `</div>`;
@@ -3842,13 +3918,13 @@ function dashDetailHTML(item) {
   if ((item.tags||[]).length) h += `<div class="dd-tags">${item.tags.map(t=>`<span class="dd-tag">#${esc(t)}</span>`).join("")}</div>`;
   if (item.flagDate) {
     const days = Math.ceil((new Date(item.flagDate).getTime()-Date.now())/86400000);
-    h += `<div class="dd-meta"><span>📅 ${item.flagDate} · ${days<0?Math.abs(days)+'d overdue':days===0?'Due today':days+'d left'}</span></div>`;
+    h += `<div class="dd-meta">Due ${esc(item.flagDate)} · ${days<0?Math.abs(days)+'d overdue':days===0?'today':days+'d left'}</div>`;
   }
 
   // Action buttons
   h += `<div class="dd-actions">
-    <button class="dd-act" onclick="event.stopPropagation();openEdit('${item.id}')" style="color:var(--ac2)">✏️ Edit</button>
-    <button class="dd-act" onclick="event.stopPropagation();askDelete('${item.id}')" style="color:var(--red)">🗑 Delete</button>
+    <button class="dd-act edit" onclick="event.stopPropagation();openEdit('${item.id}')">${UI_SVG.edit}Edit</button>
+    <button class="dd-act del" onclick="event.stopPropagation();askDelete('${item.id}')">${UI_SVG.trash}Delete</button>
   </div>`;
 
   return h;
@@ -3941,6 +4017,7 @@ function toggleSettings(show) {
 
 function dismissBanner() {
   $("drive-banner").classList.remove("show");
+  $("drive-banner").style.display = "none";
   LS.set("drive_banner_dismissed","1");
 }
 
@@ -4143,10 +4220,10 @@ function applyTheme(theme) {
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (isLight) {
     document.documentElement.classList.add("light-theme");
-    if (metaThemeColor) metaThemeColor.setAttribute("content", "#f8fafc");
+    if (metaThemeColor) metaThemeColor.setAttribute("content", "#f4f5f9");
   } else {
     document.documentElement.classList.remove("light-theme");
-    if (metaThemeColor) metaThemeColor.setAttribute("content", "#0a0b10");
+    if (metaThemeColor) metaThemeColor.setAttribute("content", "#0b0c11");
   }
 }
 

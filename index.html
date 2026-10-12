@@ -1452,6 +1452,40 @@
       animation: none;
     }
 
+    /* Type colour strip — overlay follows the rounded corners */
+    .card,
+    .dcard {
+      position: relative;
+      --strip: var(--b3);
+    }
+
+    .card::before,
+    .dcard::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      box-shadow: inset 4px 0 0 var(--strip);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .card-pw, .dc-pw { --strip: var(--ac); }
+    .card-bm, .dc-bm { --strip: var(--blue); }
+    .card-nt, .dc-nt { --strip: var(--amber); }
+    .card-td, .dc-td { --strip: var(--green); }
+
+    .card-top,
+    .dcard-top {
+      padding-left: 18px;
+    }
+
+    .card-detail,
+    .todo-detail,
+    .dcard-detail {
+      margin-left: 18px;
+    }
+
     .card.open {
       border-color: var(--b2);
       box-shadow: var(--shadow-2);
@@ -4154,8 +4188,8 @@
   </div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="config.js?v=107"></script>
-  <script src="app.js?v=107"></script>
+  <script src="config.js?v=108"></script>
+  <script src="app.js?v=108"></script>
 </body>
 
 </html>

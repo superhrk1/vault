@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vault Autofill Helper",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Securely autofills login credentials from your Vault PWA.",
   "icons": {
     "128": "icon.png"
@@ -15,9 +15,9 @@
   ],
   "externally_connectable": {
     "matches": [
-      "*://localhost/*",
-      "*://127.0.0.1/*",
-      "https://*.github.io/*"
+      "https://superhrk1.github.io/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
     ]
   },
   "content_scripts": [

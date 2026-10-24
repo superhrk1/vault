@@ -70,6 +70,25 @@ const UI_SVG = {
   plus:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`,
 };
 const esc  = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+// Value passed as an argument inside an inline handler (onclick="fn(${jsArg(v)})").
+// HTML entities are decoded before the handler runs, so esc() alone cannot stop a
+// quote from breaking out of a '...' JS string — JSON-encode first, then HTML-escape.
+const jsArg = v => esc(JSON.stringify(String(v ?? "")));
+// Only http(s) links may be opened; bare hosts get https:// (blocks javascript:/data: URLs)
+const safeUrl = u => {
+  const s = String(u || "").trim();
+  if (!s) return null;
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : "https://" + s);
+    return (url.protocol === "https:" || url.protocol === "http:") ? url.href : null;
+  } catch { return null; }
+};
+const timingSafeEqual = (a, b) => {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i];
+  return d === 0;
+};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const vibrate = ms => { try { navigator?.vibrate?.(ms); } catch {} };
 
@@ -108,17 +127,31 @@ const IDB = {
   
   async get(key) {
     try {
-      const db = await this._getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(this.storeName, "readonly");
-        const store = transaction.objectStore(this.storeName);
-        const request = store.get(key);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
+      return await this.getStrict(key);
     } catch {
       return null;
     }
+  },
+
+  // Like get(), but a storage failure throws instead of looking like "no data"
+  async getStrict(key) {
+    const db = await this._getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(this.storeName, "readonly");
+      const store = transaction.objectStore(this.storeName);
+      const request = store.get(key);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async clear() {
+    const db = await this._getDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(this.storeName, "readwrite").objectStore(this.storeName).clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   },
   
   async set(key, val) {
@@ -187,6 +220,61 @@ const Crypto = {
 };
 
 // ══════════════════════════════════════════════════════════
+//  PIN VERIFIER
+//  v2: PBKDF2-SHA256 with a random per-device salt ("vault_kdf").
+//  v1 (legacy): one fast salted SHA-256 in "vault_hash" — brute-forceable in
+//  milliseconds — upgraded automatically on the first successful unlock.
+//  After the upgrade "vault_hash" holds a marker that can never match, so an
+//  older cached build shows "Enter PIN" (data untouched) rather than offering
+//  to create a new vault on top of the existing data.
+// ══════════════════════════════════════════════════════════
+const PIN_MARKER  = "upgraded-v2";
+const MIN_NEW_PIN = 6;   // new / changed PINs; existing shorter PINs still unlock
+
+const PinStore = {
+  exists() {
+    return !!(LS.get("vault_kdf") || LS.get("vault_hash"));
+  },
+
+  async derive(pin, salt, iterations) {
+    const mat  = await crypto.subtle.importKey("raw", enc(pin), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name:"PBKDF2", salt, iterations, hash:"SHA-256" }, mat, 256);
+    return new Uint8Array(bits);
+  },
+
+  async set(pin) {
+    const salt = rnd(16);
+    const iter = VAULT_CONFIG.PBKDF2_ITERATIONS || 310000;
+    const hash = await this.derive(pin, salt, iter);
+    LS.set("vault_kdf", { v:2, salt:b64e(salt), iter, hash:b64e(hash) });
+    LS.set("vault_hash", PIN_MARKER);
+  },
+
+  async verify(pin) {
+    if (!pin) return false;
+    const kdf = LS.get("vault_kdf");
+    if (kdf && kdf.v === 2 && kdf.salt && kdf.hash) {
+      const got = await this.derive(pin, b64d(kdf.salt), kdf.iter || 310000);
+      return timingSafeEqual(got, b64d(kdf.hash));
+    }
+    const legacy = LS.get("vault_hash");
+    if (legacy && legacy !== PIN_MARKER) {
+      if (await Crypto.hashPassword(pin) !== legacy) return false;
+      await this.set(pin);   // upgrade v1 → v2
+      return true;
+    }
+    // No usable verifier: accept the PIN only if it decrypts the stored vault
+    try {
+      const blob = await IDB.getStrict("vault_data");
+      if (!blob) return false;
+      await Crypto.decrypt(blob, pin);
+      await this.set(pin);
+      return true;
+    } catch { return false; }
+  },
+};
+
+// ══════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════
 let STATE = {
@@ -232,24 +320,88 @@ let STATE = {
 // ══════════════════════════════════════════════════════════
 //  STORAGE  — only encrypted blobs ever hit localStorage
 // ══════════════════════════════════════════════════════════
+// Set when the stored vault could not be read; blocks writes so a transient
+// storage error can never overwrite real data with an empty vault.
+let _storageReadFailed = false;
+
 async function persistItems() {
   if (!STATE.masterKey) return;
+  if (_storageReadFailed) {
+    toast("Storage unavailable — reload the app before making changes", "error");
+    throw new Error("STORAGE_READ_FAILED");
+  }
   if (!STATE.items.length) { await IDB.del("vault_data"); return; }
   const blob = await Crypto.encrypt(STATE.items, STATE.masterKey);
   await IDB.set("vault_data", blob);
   syncWithExtension(false);
 }
 
+// Keep an unreadable blob instead of letting the next save overwrite it
+async function setAsideBlob(blob, reason) {
+  try {
+    await IDB.set(`vault_data_orphan_${Date.now()}`, blob);
+    console.warn("[Vault] Stored vault set aside:", reason);
+    return true;
+  } catch { return false; }
+}
+
 async function loadItems() {
-  const blob = await IDB.get("vault_data");
-  if (!blob) { STATE.items = []; return; }
+  _storageReadFailed = false;
+  let blob;
+  try {
+    blob = await IDB.getStrict("vault_data");
+  } catch (e) {
+    _storageReadFailed = true;
+    STATE.items = [];
+    toast("Couldn't read local storage — reload the app", "error");
+    return;
+  }
+
+  if (!blob) {
+    // Builds before the IndexedDB move kept the vault in localStorage and never migrated it
+    const legacy = LS.get("vault_data");
+    if (legacy) {
+      try {
+        STATE.items = await Crypto.decrypt(legacy, STATE.masterKey);
+        validateItems();
+        await persistItems();
+        toast(`Recovered ${STATE.items.filter(i => !i.deleted).length} items from older storage`, "success");
+        return;
+      } catch {}
+    }
+    STATE.items = [];
+    return;
+  }
+
   try {
     STATE.items = await Crypto.decrypt(blob, STATE.masterKey);
     validateItems();
     syncWithExtension(false);
-  } catch {
-    STATE.items = [];
+    return;
+  } catch {}
+
+  // Main copy doesn't open with this PIN. A PIN change interrupted mid-way leaves
+  // the previous copy in "vault_data_prev" — try it before giving up.
+  try {
+    const prev = await IDB.getStrict("vault_data_prev");
+    if (prev) {
+      STATE.items = await Crypto.decrypt(prev, STATE.masterKey);
+      validateItems();
+      if (!(await setAsideBlob(blob, "replaced by vault_data_prev"))) throw new Error("aside");
+      await IDB.set("vault_data", prev);
+      await IDB.del("vault_data_prev");
+      return;
+    }
+  } catch {}
+
+  STATE.items = [];
+  if (!(await setAsideBlob(blob, "does not decrypt with current PIN"))) {
+    _storageReadFailed = true;   // couldn't preserve it — refuse to overwrite
+    toast("Saved data didn't open with this PIN — changes are disabled", "error");
+    return;
   }
+  await IDB.del("vault_data");
+  toast("Saved data didn't open with this PIN — a backup copy was kept", "warn");
 }
 
 // ── Data integrity validation ──────────────────────────
@@ -304,7 +456,7 @@ async function boot() {
   } else {
     STATE.drive.status = "noconfig";
   }
-  const hasVault = !!LS.get("vault_hash");
+  const hasVault = PinStore.exists();
   // Auto-unlock if session key exists and within inactivity window (page refresh)
   // Session key is in sessionStorage (ephemeral — cleared on tab close, not on disk)
   const sessionPin = SS.get("vault_session_key");
@@ -315,7 +467,7 @@ async function boot() {
 
   if (hasVault && sessionPin && sessionValid) {
     try {
-      const ok = await Crypto.verifyPassword(sessionPin, LS.get("vault_hash"));
+      const ok = await PinStore.verify(sessionPin);
       if (ok) {
         STATE.masterKey = sessionPin;
         LS.set("vault_last_activity", Date.now().toString());
@@ -333,7 +485,7 @@ async function boot() {
   }
   if (!hasVault) {
     $("pin-label").textContent = "Create a PIN";
-    $("lock-hint").textContent = "Choose a numeric PIN (min 4 digits)";
+    $("lock-hint").textContent = `Choose a numeric PIN (min ${MIN_NEW_PIN} digits, 8+ recommended)`;
   } else {
     // Show biometric button if registered
     if (LS.get("vault_bio_cred") && await isBioAvailable()) {
@@ -404,13 +556,23 @@ function renderPinDots() {
   el.innerHTML = html;
 }
 
+let _pinBusy = false;
 async function handlePinSubmit() {
-  if (_pin.length < 4) return;
+  if (_pin.length < 4 || _pinBusy) return;
+  _pinBusy = true;
+  try { await _handlePinSubmit(); } finally { _pinBusy = false; }
+}
+
+async function _handlePinSubmit() {
   // PIN reset mode (after SQ verification)
   if (_pinResetMode) { await handlePinReset(); return; }
   setLockErr("");
-  const hasVault = !!LS.get("vault_hash");
+  const hasVault = PinStore.exists();
   if (!hasVault) {
+    if (_pinConfirm === null && _pin.length < MIN_NEW_PIN) {
+      setLockErr(`Use at least ${MIN_NEW_PIN} digits`); shakeDots();
+      _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
+    }
     if (_pinConfirm === null) {
       _pinConfirm = _pin; _pin = "";
       $("pin-label").textContent = "Confirm your PIN";
@@ -421,13 +583,16 @@ async function handlePinSubmit() {
       setLockErr("PINs don't match"); shakeDots();
       _pin = ""; _pinConfirm = null;
       $("pin-label").textContent = "Create a PIN";
-      $("lock-hint").textContent = "Choose a numeric PIN (min 4 digits)";
+      $("lock-hint").textContent = `Choose a numeric PIN (min ${MIN_NEW_PIN} digits, 8+ recommended)`;
       renderPinDots(); $("nk-submit").classList.add("dim"); return;
     }
     await setupVault(_pin); return;
   }
-  const hash = await Crypto.hashPassword(_pin);
-  if (hash !== LS.get("vault_hash")) {
+  const label = $("pin-label"), prevLabel = label.textContent;
+  label.textContent = "Unlocking…";
+  const ok = await PinStore.verify(_pin);
+  label.textContent = prevLabel;
+  if (!ok) {
     recordFailedAttempt();
     const remaining = 3 - getFailCount();
     if (remaining <= 0) { startLockout(); }
@@ -442,10 +607,23 @@ async function handlePinSubmit() {
 }
 
 async function setupVault(pw) {
-  if (pw.length < 4) { setLockErr("Min 4 digits"); return; }
-  const hash = await Crypto.hashPassword(pw);
-  LS.set("vault_hash", hash);
-  STATE.masterKey = pw; STATE.items = []; _pin = ""; _pinConfirm = null;
+  if (pw.length < MIN_NEW_PIN) { setLockErr(`Use at least ${MIN_NEW_PIN} digits`); return; }
+  // localStorage can be cleared while IndexedDB survives. Never start a new vault
+  // on top of existing data: reopen it if this PIN fits, otherwise keep a copy aside.
+  let existing = [];
+  try {
+    const blob = await IDB.getStrict("vault_data");
+    if (blob) {
+      try { existing = await Crypto.decrypt(blob, pw); }
+      catch {
+        if (!(await setAsideBlob(blob, "new vault created over it"))) { setLockErr("Storage error — try again"); return; }
+        await IDB.del("vault_data");
+      }
+    }
+  } catch { setLockErr("Storage error — try again"); return; }
+  await PinStore.set(pw);
+  STATE.masterKey = pw; STATE.items = Array.isArray(existing) ? existing : []; _pin = ""; _pinConfirm = null;
+  if (STATE.items.length) { validateItems(); toast(`Restored ${STATE.items.filter(i => !i.deleted).length} saved items`, "success"); }
   SS.set("vault_session_key", pw);   // sessionStorage — ephemeral, not persisted to disk
   LS.set("vault_last_activity", Date.now().toString());
   $("pin-entry").style.display = "none";
@@ -476,6 +654,7 @@ function startAutoSyncTimer() {
 
 function openApp() {
   $("lock").classList.add("gone");
+  Bio.upgrade(STATE.masterKey, null);
   renderAll(); showPage("home"); updateStats(); renderDrivePanel();
   const configured = VAULT_CONFIG.GOOGLE_CLIENT_ID && !VAULT_CONFIG.GOOGLE_CLIENT_ID.startsWith("PASTE_");
 
@@ -573,9 +752,9 @@ function lockVault() {
   const lh = $("lock-header"); if (lh) lh.style.display = "";
   $("lock").classList.remove("gone"); setLockErr(""); renderPinDots();
   const btn = $("nk-submit"); if (btn) btn.classList.add("dim");
-  const hasVault = !!LS.get("vault_hash");
+  const hasVault = PinStore.exists();
   $("pin-label").textContent = hasVault ? "Enter PIN" : "Create a PIN";
-  $("lock-hint").textContent = hasVault ? "Min 4 digits · Locked after 3 wrong attempts" : "Choose a numeric PIN (min 4 digits)";
+  $("lock-hint").textContent = hasVault ? "Locked for 10 minutes after 3 wrong attempts" : `Choose a numeric PIN (min ${MIN_NEW_PIN} digits, 8+ recommended)`;
   // Show biometric if registered
   if (hasVault && LS.get("vault_bio_cred")) {
     $("bio-section").classList.add("show");
@@ -743,7 +922,7 @@ function startPinReset() {
   $("lock-hint").style.display = "";
   $("forgot-link").style.display = "none";
   $("pin-label").textContent = "Create your new PIN";
-  $("lock-hint").textContent = "Choose a new numeric PIN (min 4 digits)";
+  $("lock-hint").textContent = `Choose a new numeric PIN (min ${MIN_NEW_PIN} digits, 8+ recommended)`;
   setLockErr("");
   renderPinDots();
   $("nk-submit").classList.add("dim");
@@ -751,6 +930,10 @@ function startPinReset() {
 
 async function handlePinReset() {
   if (_pin.length < 4) return;
+  if (_pinResetConfirm === null && _pin.length < MIN_NEW_PIN) {
+    setLockErr(`Use at least ${MIN_NEW_PIN} digits`); shakeDots();
+    _pin = ""; renderPinDots(); $("nk-submit").classList.add("dim"); return;
+  }
   if (_pinResetConfirm === null) {
     _pinResetConfirm = _pin; _pin = "";
     $("pin-label").textContent = "Confirm new PIN";
@@ -761,31 +944,32 @@ async function handlePinReset() {
     setLockErr("PINs don't match"); shakeDots();
     _pin = ""; _pinResetConfirm = null;
     $("pin-label").textContent = "Create your new PIN";
-    $("lock-hint").textContent = "Choose a new numeric PIN (min 4 digits)";
+    $("lock-hint").textContent = `Choose a new numeric PIN (min ${MIN_NEW_PIN} digits, 8+ recommended)`;
     renderPinDots(); $("nk-submit").classList.add("dim"); return;
   }
-  // Re-encrypt vault with new PIN
-  const oldKey = STATE.masterKey;
-  // We need the old key to decrypt. During PIN reset via SQ, the user was NOT logged in.
-  // The vault data is still encrypted with the old key. We'll load with the old hash's password.
-  // Actually, we need to find the old PIN. Since we verified SQ, we need to re-encrypt.
-  // The data in localStorage is encrypted with the OLD pin. We cannot decrypt without it.
-  // So instead: wipe vault data, set new PIN, start fresh.
-  // OR: store the master key temporarily after SQ verification.
-  // Better approach: SQ recovery resets everything (PIN + wipes vault) for security.
+  // The vault is encrypted with the forgotten PIN and cannot be opened without it.
+  // Start a new, empty vault — but keep the old encrypted copy aside rather than
+  // deleting it (it is also still on Drive, encrypted with the old PIN).
   const newPin = _pin;
-  const hash = await Crypto.hashPassword(newPin);
-  LS.set("vault_hash", hash);
+  try {
+    const blob = await IDB.getStrict("vault_data");
+    if (blob) {
+      if (!(await setAsideBlob(blob, "PIN reset via secret question"))) throw new Error("aside");
+      await IDB.del("vault_data");
+    }
+  } catch {
+    setLockErr("Storage error — try again");
+    _pin = ""; _pinResetConfirm = null; renderPinDots(); return;
+  }
+  await PinStore.set(newPin);
   STATE.masterKey = newPin;
   STATE.items = [];
-  LS.del("vault_data");
+  SS.set("vault_session_key", newPin);
+  LS.set("vault_last_activity", Date.now().toString());
   _pin = ""; _pinResetMode = false; _pinResetConfirm = null;
-  // Clear all biometric data since PIN changed
-  LS.del("vault_bio_cred"); LS.del("vault_bio_nonce"); LS.del("vault_bio_enc");
-  LS.del("vault_bio_key"); LS.del("vault_bio_iv");
-  LS.del("vault_bio_asked");  // Allow re-offering biometric registration
+  await Bio.clear();   // fingerprint data wraps the old PIN
   openApp();
-  toast("PIN reset — Vault data was cleared for security", "warn");
+  toast("New PIN set. Previous items stay locked with the old PIN.", "warn");
 }
 
 async function sqLockoutUnlock() {
@@ -884,19 +1068,96 @@ async function isBioAvailable() {
   catch { return false; }
 }
 
+// Fingerprint unlock stores the PIN encrypted ("wrapped") on this device.
+//  prf    — key derived from the authenticator via the WebAuthn PRF extension:
+//           the PIN can only be unwrapped after a real fingerprint check (strongest).
+//  device — non-extractable AES key in IndexedDB: never readable as raw bytes,
+//           but usable by code running in this app.
+//  legacy — raw AES key kept in localStorage next to the ciphertext (before v1.2).
+//           Upgraded automatically on the next unlock.
+const Bio = {
+  wrap() { return LS.get("vault_bio_wrap"); },
+
+  async keyFromPrf(prfOutput) {
+    const base = await crypto.subtle.importKey("raw", prfOutput, "HKDF", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey(
+      { name:"HKDF", hash:"SHA-256", salt:enc("vault-bio-v2"), info:enc("pin-wrap") },
+      base, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
+    );
+  },
+
+  async deviceKey(create) {
+    let key = await IDB.get("bio_wrap_key");
+    if (!key && create) {
+      key = await crypto.subtle.generateKey({ name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+      await IDB.set("bio_wrap_key", key);
+    }
+    return key || null;
+  },
+
+  // One localStorage write so mode and ciphertext can never disagree
+  async store(pin, key, mode) {
+    const iv = rnd(12);
+    const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, enc(pin));
+    LS.set("vault_bio_wrap", { v:2, mode, iv:b64e(iv), ct:b64e(ct) });
+    ["vault_bio_key","vault_bio_iv","vault_bio_enc","vault_bio_nonce"].forEach(k => LS.del(k));
+    if (mode !== "device") await IDB.del("bio_wrap_key").catch(() => {});
+  },
+
+  async unwrap(prfOutput) {
+    const w = this.wrap();
+    let key, iv, ct;
+    if (w && w.v === 2) {
+      if (w.mode === "prf") {
+        if (!prfOutput) throw new Error("PRF_UNAVAILABLE");
+        key = await this.keyFromPrf(prfOutput);
+      } else {
+        key = await this.deviceKey(false);
+        if (!key) throw new Error("NO_DEVICE_KEY");
+      }
+      iv = b64d(w.iv); ct = b64d(w.ct);
+    } else {
+      key = await crypto.subtle.importKey("raw", b64d(LS.get("vault_bio_key")), { name:"AES-GCM" }, false, ["decrypt"]);
+      iv = b64d(LS.get("vault_bio_iv")); ct = b64d(LS.get("vault_bio_enc"));
+    }
+    return dec(await crypto.subtle.decrypt({ name:"AES-GCM", iv }, key, ct));
+  },
+
+  // Move to the strongest storage this device allows (needs the plain PIN)
+  async upgrade(pin, prfOutput) {
+    if (!LS.get("vault_bio_cred") || !pin) return;
+    const w = this.wrap();
+    try {
+      if (prfOutput && w?.mode !== "prf") {
+        await this.store(pin, await this.keyFromPrf(prfOutput), "prf");
+      } else if (!w || w.v !== 2) {
+        await this.store(pin, await this.deviceKey(true), "device");
+      }
+    } catch (e) { console.warn("[Vault] Biometric storage upgrade skipped:", e); }
+  },
+
+  prfSalt() {
+    let salt = LS.get("vault_bio_prf_salt");
+    if (!salt) { salt = b64e(rnd(32)); LS.set("vault_bio_prf_salt", salt); }
+    return b64d(salt);
+  },
+
+  async clear() {
+    ["vault_bio_cred","vault_bio_wrap","vault_bio_prf_salt","vault_bio_key","vault_bio_iv",
+     "vault_bio_enc","vault_bio_nonce","vault_bio_asked"].forEach(k => LS.del(k));
+    await IDB.del("bio_wrap_key").catch(() => {});
+    $("bio-section")?.classList.remove("show");
+  },
+};
+
 async function offerBioRegistration() {
   if (LS.get("vault_bio_cred")) return;  // Already registered
-  // Clear stale vault_bio_asked flag if bio credential was removed
-  // (e.g. after PIN reset or manual disable) so user gets re-offered
-  if (!LS.get("vault_bio_cred") && LS.get("vault_bio_asked") && !LS.get("vault_bio_key")) {
-    LS.del("vault_bio_asked");
-  }
-  if (LS.get("vault_bio_asked")) return;  // Already asked this session
+  if (LS.get("vault_bio_asked")) return;  // Already offered on this device
   if (!await isBioAvailable()) return;
   LS.set("vault_bio_asked", "1");
   // Small delay so the main UI loads first
   setTimeout(() => {
-    if (confirm("Enable fingerprint unlock for faster access?")) {
+    if (STATE.masterKey && confirm("Enable fingerprint unlock for faster access?")) {
       registerBiometric(STATE.masterKey);
     }
   }, 800);
@@ -904,15 +1165,12 @@ async function offerBioRegistration() {
 
 async function registerBiometric(pin) {
   try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const userId    = crypto.getRandomValues(new Uint8Array(16));
-    const rpId      = location.hostname || "localhost";
-
+    const prfSalt = rnd(32);
     const credential = await navigator.credentials.create({
       publicKey: {
-        challenge,
-        rp: { name: "Vault", id: rpId },
-        user: { id: userId, name: "vault-user", displayName: "Vault User" },
+        challenge: rnd(32),
+        rp: { name: "Vault", id: location.hostname || "localhost" },
+        user: { id: rnd(16), name: "vault-user", displayName: "Vault User" },
         pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
         authenticatorSelection: {
           authenticatorAttachment: "platform",
@@ -920,25 +1178,17 @@ async function registerBiometric(pin) {
           residentKey: "preferred",
         },
         timeout: 60000,
+        extensions: { prf: { eval: { first: prfSalt } } },
       }
     });
 
-    const credId = b64e(credential.rawId);
-    LS.set("vault_bio_cred", credId);
-
-    // Encrypt PIN with AES-256-GCM (WebCrypto) — replaces the previous weak XOR
-    const bioKey  = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-    const bioIV   = crypto.getRandomValues(new Uint8Array(12));
-    const pinCT   = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: bioIV },
-      bioKey,
-      new TextEncoder().encode(pin)
-    );
-    const rawKey  = await crypto.subtle.exportKey("raw", bioKey);
-    LS.set("vault_bio_key", b64e(rawKey));
-    LS.set("vault_bio_iv",  b64e(bioIV));
-    LS.set("vault_bio_enc", b64e(pinCT));
-    LS.del("vault_bio_nonce");   // remove legacy XOR field if present
+    const prfOut = credential.getClientExtensionResults?.()?.prf?.results?.first;
+    await Bio.clear();
+    LS.set("vault_bio_prf_salt", b64e(prfSalt));
+    if (prfOut) await Bio.store(pin, await Bio.keyFromPrf(prfOut), "prf");
+    else        await Bio.store(pin, await Bio.deviceKey(true), "device");
+    LS.set("vault_bio_cred", b64e(credential.rawId));
+    LS.set("vault_bio_asked", "1");
 
     toast("Fingerprint unlock enabled", "success");
   } catch (e) {
@@ -954,42 +1204,34 @@ async function biometricUnlock() {
   _bioInProgress = true;
 
   try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const rawId = b64d(credId);
-    const rpId  = location.hostname || "localhost";
-
-    await navigator.credentials.get({
+    const assertion = await navigator.credentials.get({
       publicKey: {
-        challenge,
-        rpId,
-        allowCredentials: [{ id: rawId, type: "public-key", transports: ["internal"] }],
+        challenge: rnd(32),
+        rpId: location.hostname || "localhost",
+        allowCredentials: [{ id: b64d(credId), type: "public-key", transports: ["internal"] }],
         userVerification: "required",
         timeout: 60000,
+        extensions: { prf: { eval: { first: Bio.prfSalt() } } },
       }
     });
+    const prfOut = assertion.getClientExtensionResults?.()?.prf?.results?.first;
 
-    // Biometric succeeded — recover PIN using AES-GCM decryption
-    const rawKey = b64d(LS.get("vault_bio_key"));
-    const bioIV  = b64d(LS.get("vault_bio_iv"));
-    const pinCT  = b64d(LS.get("vault_bio_enc"));
-    const bioKey = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
-    const pinBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bioIV }, bioKey, pinCT);
-    const pin = new TextDecoder().decode(pinBuf);
+    let pin;
+    try { pin = await Bio.unwrap(prfOut); } catch { pin = null; }
 
-    const hash = await Crypto.hashPassword(pin);
-    if (hash === LS.get("vault_hash")) {
+    if (pin && await PinStore.verify(pin)) {
       clearFailCount();
       STATE.masterKey = pin;
       SS.set("vault_session_key", pin);   // sessionStorage — ephemeral
       LS.set("vault_last_activity", Date.now().toString());
+      await Bio.upgrade(pin, prfOut);
       await loadItems();
       openApp();
       toast("Unlocked with fingerprint", "success");
     } else {
-      // PIN changed since bio was registered
+      // PIN changed since registration, or the wrapped PIN can't be opened here
       setLockErr("Fingerprint data outdated — use PIN");
-      LS.del("vault_bio_cred"); LS.del("vault_bio_key"); LS.del("vault_bio_iv"); LS.del("vault_bio_enc");
-      $("bio-section").classList.remove("show");
+      await Bio.clear();
     }
   } catch (e) {
     setLockErr("Fingerprint cancelled — use PIN");
@@ -1031,7 +1273,9 @@ async function renderBioSettings() {
   const hasCred = !!LS.get("vault_bio_cred");
   if (hasCred) {
     bioToggle.classList.add("on");
-    bioDesc.textContent = "Biometric unlock is enabled and ready";
+    bioDesc.textContent = Bio.wrap()?.mode === "prf"
+      ? "On · PIN protected by your device's secure hardware"
+      : "On · PIN stored encrypted on this device";
   } else {
     bioToggle.classList.remove("on");
     bioDesc.textContent = "Touch to set up biometric fingerprint unlock";
@@ -1048,12 +1292,8 @@ async function toggleBiometricSetting() {
   const hasCred = !!LS.get("vault_bio_cred");
   if (hasCred) {
     if (confirm("Disable biometric fingerprint unlock?")) {
-      LS.del("vault_bio_cred");
-      LS.del("vault_bio_nonce"); // legacy XOR field
-      LS.del("vault_bio_key");
-      LS.del("vault_bio_iv");
-      LS.del("vault_bio_enc");
-      LS.del("vault_bio_asked");  // Allow re-offering biometric registration
+      await Bio.clear();
+      LS.set("vault_bio_asked", "1");   // don't re-offer right after turning it off
       toast("Biometric unlock disabled", "info");
       renderBioSettings();
     }
@@ -1071,32 +1311,13 @@ async function toggleBiometricSetting() {
 // ══════════════════════════════════════════════════════════
 //  GOOGLE DRIVE — OAuth2 implicit flow
 // ══════════════════════════════════════════════════════════
+// Drive tokens come only from the Google Identity Services popup (connectDrive).
+// A token in the URL is never accepted: anyone could send a link carrying *their*
+// token and make the vault upload itself to their Drive for offline cracking.
 function handleOAuthCallback() {
-  const hash = location.hash;
-  if (!hash.includes("access_token")) return;
-  const params = new URLSearchParams(hash.slice(1));
-  const token  = params.get("access_token");
-  if (!token) return;
-  STATE.drive.token = token;
-  LS.set("drive_token", token);
-  LS.set("drive_connected", "true");
-  // Store token expiry (Google sends expires_in in seconds, default 3600)
-  const expiresIn = parseInt(params.get("expires_in") || "3600", 10);
-  const expiry = Date.now() + expiresIn * 1000;
-  STATE.drive.tokenExpiry = expiry;
-  LS.set("drive_token_expiry", expiry);
-  // Clean URL
-  history.replaceState(null, "", location.pathname);
-
-  // Fetch email for login_hint in future silent refreshes
-  fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-    headers: { "Authorization": "Bearer " + token }
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data && data.email) LS.set("drive_email", data.email);
-  })
-  .catch(err => console.error("Could not fetch user email:", err));
+  if (location.hash.includes("access_token")) {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
 }
 
 function isTokenExpired() {
@@ -1491,7 +1712,9 @@ async function pullFromDrive(silent = false) {
     }
 
     if (!payload.vault) throw new Error("Invalid backup");
-    const imported = await Crypto.decrypt(payload.vault, STATE.masterKey);
+    let imported;
+    try { imported = await Crypto.decrypt(payload.vault, STATE.masterKey); }
+    catch { throw new Error("Drive backup uses a different PIN"); }
     if (!Array.isArray(imported)) throw new Error("Invalid vault data");
 
     let added = 0;
@@ -2104,10 +2327,14 @@ function generateSuggestions(query) {
 }
 
 function highlightMatch(text, query) {
-  if (!query) return esc(text);
+  const raw = String(text ?? "");
+  if (!query) return esc(raw);
   const cleanQ = query.startsWith("#") ? query.slice(1) : query;
+  if (!cleanQ) return esc(raw);
   const regex = new RegExp(`(${escapeRegExp(cleanQ)})`, "gi");
-  return esc(text).replace(regex, `<mark class="match-highlight">$1</mark>`);
+  return raw.split(regex).map((part, i) =>
+    i % 2 ? `<mark class="match-highlight">${esc(part)}</mark>` : esc(part)
+  ).join("");
 }
 
 function escapeRegExp(string) {
@@ -2614,8 +2841,8 @@ function cardHTML(item) {
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
 
-  return `<div class="card ${ccls}${exp?" open":""}" id="card-${id}">
-    <div class="card-top" onclick="toggleCard('${id}')">
+  return `<div class="card ${ccls}${exp?" open":""}" id="card-${esc(id)}">
+    <div class="card-top" onclick="toggleCard(${jsArg(id)})">
       <div class="ci ${cls}">${ico}</div>
       <div class="cm">
         <div class="ct"><span class="ct-name">${highlightMatch(item.title||"Untitled", q)}</span></div>
@@ -2639,7 +2866,7 @@ function todoCardHTML(item) {
   const subs = item.subitems || [];
   const done = subs.filter(s => s.done).length;
   const total = subs.length;
-  const colorClass = item.color ? " color-" + item.color : "";
+  const colorClass = TODO_COLORS.some(c => c.name === item.color) ? " color-" + item.color : "";
   const colorHex = (TODO_COLORS.find(c => c.name === item.color) || TODO_COLORS[6]).hex;
   const exp  = STATE.expandedId === item.id;
   const id   = item.id;
@@ -2648,7 +2875,7 @@ function todoCardHTML(item) {
   let tree = subs.map(s => {
     const d = s.done;
     return `<div class="todo-item sub">
-      <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone('${id}','${s.id}')">${d?"✓":""}</div>
+      <div class="todo-check${d?" done":""}" onclick="event.stopPropagation();toggleTodoDone(${jsArg(id)},${jsArg(s.id)})">${d?"✓":""}</div>
       <div class="todo-text${d?" done-text":""}">${highlightMatch(s.text, q)}</div>
     </div>`;
   }).join("");
@@ -2656,8 +2883,8 @@ function todoCardHTML(item) {
   const noteBlock = item.note ? `<div class="note-block">${highlightMatch(item.note, q).replace(/\n/g,"<br>")}</div>` : "";
   const tagBlock = (item.tags||[]).length ? `<div class="tag-chips">${item.tags.map(t=>`<span class="tc">#${highlightMatch(t, q)}</span>`).join("")}</div>` : "";
 
-  return `<div class="card card-td todo-card${colorClass}${exp?" open":""}" id="card-${id}">
-    <div class="card-top" onclick="toggleCard('${id}')">
+  return `<div class="card card-td todo-card${colorClass}${exp?" open":""}" id="card-${esc(id)}">
+    <div class="card-top" onclick="toggleCard(${jsArg(id)})">
       <div class="ci it">${T_SVG.todo}</div>
       <div class="cm">
         <div class="ct"><span class="ct-dot" style="background:${colorHex}"></span><span class="ct-name">${highlightMatch(item.title||"Untitled", q)}</span></div>
@@ -2677,9 +2904,9 @@ function todoCardHTML(item) {
           ${noteBlock}${tagBlock}
         </div>
         <div class="card-actions">
-          <button class="cab ca-fav" onclick="toggleFav('${id}')">${item.fav ? SVGS.starFilled : SVGS.starEmpty}<span class="cab-lbl">Fav</span></button>
-          <button class="cab ca-edit" onclick="openEdit('${id}')">${SVGS.edit}<span class="cab-lbl">Edit</span></button>
-          <button class="cab ca-del" onclick="askDelete('${id}')">${SVGS.trash}<span class="cab-lbl">Delete</span></button>
+          <button class="cab ca-fav" onclick="toggleFav(${jsArg(id)})">${item.fav ? SVGS.starFilled : SVGS.starEmpty}<span class="cab-lbl">Fav</span></button>
+          <button class="cab ca-edit" onclick="openEdit(${jsArg(id)})">${SVGS.edit}<span class="cab-lbl">Edit</span></button>
+          <button class="cab ca-del" onclick="askDelete(${jsArg(id)})">${SVGS.trash}<span class="cab-lbl">Delete</span></button>
         </div>
       </div>
     </div>
@@ -2725,20 +2952,20 @@ function detailHTML(item) {
   const id = item.id;
   let h = "";
 
-  if (item.username) h += dRow("USER", highlightMatch(item.username, q), `copyVal('${id}','username')`);
+  if (item.username) h += dRow("USER", highlightMatch(item.username, q), `copyVal(${jsArg(id)},'username')`);
 
   if (item.password) {
     const vis = STATE.pwVisible[id];
     h += `<div class="dr">
       <span class="dl">PASS</span>
-      <span class="dv${vis?"":" masked"}" id="dv-pw-${id}">${vis ? esc(item.password) : "••••••••••"}</span>
-      <span class="da" onclick="togglePwVis('${id}')" id="eye-${id}" title="${vis?"Hide":"Show"}">${vis ? UI_SVG.eyeOff : UI_SVG.eye}</span>
-      <span class="da" onclick="copyVal('${id}','password')" title="Copy">${UI_SVG.copy}</span>
+      <span class="dv${vis?"":" masked"}" id="dv-pw-${esc(id)}">${vis ? esc(item.password) : "••••••••••"}</span>
+      <span class="da" onclick="togglePwVis(${jsArg(id)})" id="eye-${esc(id)}" title="${vis?"Hide":"Show"}">${vis ? UI_SVG.eyeOff : UI_SVG.eye}</span>
+      <span class="da" onclick="copyVal(${jsArg(id)},'password')" title="Copy">${UI_SVG.copy}</span>
     </div>`;
   }
 
-  if (item.url)   h += dRow("URL",   `<span style="color:var(--blue)">${highlightMatch(item.url, q)}</span>`, `copyText('${esc(item.url)}')`);
-  if (item.email) h += dRow("EMAIL", highlightMatch(item.email, q), `copyText('${esc(item.email)}')`);
+  if (item.url)   h += dRow("URL",   `<span style="color:var(--blue)">${highlightMatch(item.url, q)}</span>`, `copyText(${jsArg(item.url)})`);
+  if (item.email) h += dRow("EMAIL", highlightMatch(item.email, q), `copyText(${jsArg(item.email)})`);
   if (item.price) h += dRow("PRICE", highlightMatch(item.price, q));
 
   if (item.renewal) {
@@ -2770,13 +2997,13 @@ function actionsHTML(item) {
   const id = item.id;
   let b = "";
   if (item.type==="password") {
-    b += cab(SVGS.user, "User", "ca-copy", `copyVal('${id}','username')`);
-    b += cab(SVGS.key, "Pass", "ca-copy", `copyVal('${id}','password')`);
+    b += cab(SVGS.user, "User", "ca-copy", `copyVal(${jsArg(id)},'username')`);
+    b += cab(SVGS.key, "Pass", "ca-copy", `copyVal(${jsArg(id)},'password')`);
   }
-  if (item.url) b += cab(SVGS.link, "Open", "ca-link", `openLink('${id}')`);
-  b += cab(item.fav ? SVGS.starFilled : SVGS.starEmpty, "Fav", "ca-fav", `toggleFav('${id}')`);
-  b += cab(SVGS.edit, "Edit", "ca-edit", `openEdit('${id}')`);
-  b += cab(SVGS.trash, "Delete", "ca-del", `askDelete('${id}')`);
+  if (item.url) b += cab(SVGS.link, "Open", "ca-link", `openLink(${jsArg(id)})`);
+  b += cab(item.fav ? SVGS.starFilled : SVGS.starEmpty, "Fav", "ca-fav", `toggleFav(${jsArg(id)})`);
+  b += cab(SVGS.edit, "Edit", "ca-edit", `openEdit(${jsArg(id)})`);
+  b += cab(SVGS.trash, "Delete", "ca-del", `askDelete(${jsArg(id)})`);
   return b;
 }
 
@@ -2844,6 +3071,8 @@ let _clipboardClearTimer = null;
 function openLink(id) {
   const item = STATE.items.find(i => i.id === id);
   if (!item || !item.url) return;
+  const url = safeUrl(item.url);
+  if (!url) { toast("Only http(s) links can be opened", "warn"); return; }
 
   const extId = STATE.autofillExtensionId || LS.get("vault_autofill_extension_id");
   if (extId && typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
@@ -2851,18 +3080,18 @@ function openLink(id) {
     chrome.runtime.sendMessage(extId, { action: "ping" }, (response) => {
       if (chrome.runtime.lastError || !response || !response.success) {
         console.warn("[Vault] Extension not responding, opening tab directly.");
-        window.open(item.url, "_blank", "noopener,noreferrer");
+        window.open(url, "_blank", "noopener,noreferrer");
       } else {
         // Send login credentials and target URL to the extension helper
         chrome.runtime.sendMessage(extId, {
           action: "openAndAutofill",
-          url: item.url,
+          url: url,
           username: item.username || "",
           password: item.password || ""
         }, (res) => {
           if (chrome.runtime.lastError || !res || !res.success) {
             console.warn("[Vault] Extension open failed, opening tab directly.");
-            window.open(item.url, "_blank", "noopener,noreferrer");
+            window.open(url, "_blank", "noopener,noreferrer");
           } else {
             toast("Opening link with secure autofill...", "success");
           }
@@ -2871,7 +3100,7 @@ function openLink(id) {
     });
   } else {
     // Direct open if no extension ID is configured or not supported
-    window.open(item.url, "_blank", "noopener,noreferrer");
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -3169,7 +3398,7 @@ function onFormTagInput(inp) {
   dropdown.style.display = "flex";
   dropdown.innerHTML = matches.map((t, idx) => {
     const activeClass = idx === STATE.focusedFormTagIndex ? " active-highlight" : "";
-    return `<span class="suggest-tag-pill${activeClass}" onclick="selectFormTag('${esc(t)}')" id="form-suggest-item-${idx}"><span class="pill-hash">#</span>${esc(t)}</span>`;
+    return `<span class="suggest-tag-pill${activeClass}" onclick="selectFormTag(${jsArg(t)})" id="form-suggest-item-${idx}"><span class="pill-hash">#</span>${esc(t)}</span>`;
   }).join("");
 }
 
@@ -3303,7 +3532,7 @@ function renderChips() {
   return STATE.mTags.map((t, idx) => {
     const isFocused = idx === STATE.focusedMTagIndex;
     const focusClass = isFocused ? " focused" : "";
-    return `<div class="chip${focusClass}">#${esc(t)}<span class="chip-x" onclick="removeTag('${esc(t)}')">✕</span></div>`;
+    return `<div class="chip${focusClass}">#${esc(t)}<span class="chip-x" onclick="removeTag(${jsArg(t)})">✕</span></div>`;
   }).join("");
 }
 function refreshChips() { const el = $("mchips"); if (el) el.innerHTML = renderChips(); }
@@ -3591,28 +3820,84 @@ function updateStats() {
   });
 }
 
+let _pinChangeBusy = false;
 async function changeMasterPw() {
   const nw = $("new-pw").value.trim();
-  if (!/^\d{4,12}$/.test(nw)) { toast("PIN must be 4–12 digits", "warn"); return; }
-  STATE.masterKey = nw;
-  SS.set("vault_session_key", nw);
-  await persistItems();
-  LS.set("vault_hash", await Crypto.hashPassword(nw));
-  $("new-pw").value = "";
-  if (STATE.drive.token) triggerSync();
-  toast("PIN updated", "success");
+  if (!/^\d+$/.test(nw) || nw.length < MIN_NEW_PIN || nw.length > 12) {
+    toast(`PIN must be ${MIN_NEW_PIN}–12 digits`, "warn"); return;
+  }
+  if (nw === STATE.masterKey) { toast("That's already your PIN", "info"); return; }
+  if (_pinChangeBusy || !STATE.masterKey) return;
+  _pinChangeBusy = true;
+  const oldPin = STATE.masterKey;
+  const driveOn = LS.get("drive_connected") === "true";
+  try {
+    // 1. Merge the Drive copy while it can still be opened with the old PIN
+    if (driveOn && navigator.onLine) await syncDrive(true);
+
+    // 2. Re-encrypt locally. The old copy stays in "vault_data_prev" until the
+    //    new verifier is saved, so an interruption can never strand the data.
+    try {
+      const old = await IDB.getStrict("vault_data");
+      if (old) await IDB.set("vault_data_prev", old);
+      STATE.masterKey = nw;
+      await persistItems();
+      await PinStore.set(nw);
+      await IDB.del("vault_data_prev");
+    } catch (e) {
+      STATE.masterKey = oldPin;
+      toast("Couldn't change PIN — your vault is unchanged", "error");
+      return;
+    }
+    SS.set("vault_session_key", nw);
+    $("new-pw").value = "";
+
+    // 3. Replace the Drive copy with one encrypted under the new PIN
+    if (driveOn) {
+      try { if (await ensureDriveAuth()) await uploadVault(); }
+      catch { toast("PIN changed — Drive will update on the next sync", "info"); }
+    }
+
+    // Fingerprint data wraps the old PIN
+    if (LS.get("vault_bio_cred")) {
+      await Bio.clear();
+      LS.set("vault_bio_asked", "1");
+      toast("PIN updated — turn fingerprint unlock on again", "success");
+    } else {
+      toast("PIN updated", "success");
+    }
+    renderBioSettings();
+    renderPinStrength();
+  } finally {
+    _pinChangeBusy = false;
+  }
+}
+
+// Gentle nudge for short PINs: they can be guessed offline from a copied backup
+function renderPinStrength() {
+  const el = $("pin-strength-note");
+  if (!el) return;
+  const len = (STATE.masterKey || "").length;
+  if (len && len < 8) {
+    el.textContent = `Your PIN has ${len} digits. Use 8 or more so a copied backup file can't be cracked by guessing.`;
+    el.style.display = "";
+  } else {
+    el.style.display = "none";
+  }
 }
 
 function clearAll() {
   $("confirm-title").textContent = "Wipe All Data";
-  $("confirm-msg").textContent   = "This permanently deletes your ENTIRE vault — all passwords, bookmarks, and notes. This CANNOT be undone.";
+  $("confirm-msg").textContent   = "This permanently deletes everything stored on this device — all passwords, bookmarks, notes and settings. Your Google Drive backup is not touched. This cannot be undone.";
   $("confirm-ok").textContent    = "Wipe Everything";
-  $("confirm-ok").onclick = () => {
-    localStorage.clear();
-    STATE.items = []; STATE.masterKey = null;
+  $("confirm-ok").onclick = async () => {
     closeOverlay("confirm-overlay");
+    try { await IDB.clear(); } catch {}
+    localStorage.clear();
+    sessionStorage.clear();
+    STATE.items = []; STATE.masterKey = null;
     lockVault();
-    toast("All data wiped");
+    toast("All data on this device wiped");
   };
   openOverlay("confirm-overlay");
 }
@@ -3838,7 +4123,7 @@ function renderDashboard() {
        const dispStr = item.cloudKeyword.trim();
        const randColor = colors[(dispStr.length * 7) % colors.length];
        const pseudoRand = (dispStr.length * 13) % 10;
-       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand('${item.id}')">${esc(dispStr)}</span>`;
+       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand(${jsArg(item.id)})">${esc(dispStr)}</span>`;
     });
     cloudHtml += `</div>`;
     html += cloudHtml;
@@ -3878,14 +4163,14 @@ function dashCardHTML(item, isDone, idx, total) {
     const upSvg = UI_SVG.up.replace("<svg ", '<svg width="14" height="14" ');
     const dnSvg = UI_SVG.down.replace("<svg ", '<svg width="14" height="14" ');
     arrows = `<div class="dcard-arrows">
-      <button class="darr" aria-label="Move up" onclick="event.stopPropagation();dashMoveUp('${item.id}')"${idx===0?' style="visibility:hidden"':''}>${upSvg}</button>
-      <button class="darr" aria-label="Move down" onclick="event.stopPropagation();dashMoveDown('${item.id}')"${idx===total-1?' style="visibility:hidden"':''}>${dnSvg}</button>
+      <button class="darr" aria-label="Move up" onclick="event.stopPropagation();dashMoveUp(${jsArg(item.id)})"${idx===0?' style="visibility:hidden"':''}>${upSvg}</button>
+      <button class="darr" aria-label="Move down" onclick="event.stopPropagation();dashMoveDown(${jsArg(item.id)})"${idx===total-1?' style="visibility:hidden"':''}>${dnSvg}</button>
     </div>`;
   }
 
-  return `<div class="dcard ${DCLS[item.type]||""}${isDone?" done-card":""}${isExp?" open":""}" id="dc-${item.id}">
-    <div class="dcard-top" onclick="dashToggleExpand('${item.id}')">
-      <div class="dcheck${isDone?" checked":""}" onclick="event.stopPropagation();dashToggleDone('${item.id}')">${isDone?"✓":""}</div>
+  return `<div class="dcard ${DCLS[item.type]||""}${isDone?" done-card":""}${isExp?" open":""}" id="dc-${esc(item.id)}">
+    <div class="dcard-top" onclick="dashToggleExpand(${jsArg(item.id)})">
+      <div class="dcheck${isDone?" checked":""}" onclick="event.stopPropagation();dashToggleDone(${jsArg(item.id)})">${isDone?"✓":""}</div>
       <div class="dcard-mid">
         <div class="dcard-title"><span class="dt-ico">${T_SVG[item.type]||T_SVG.note}</span><span class="dt-name">${esc(item.title||"Untitled")}</span></div>
         <div class="dcard-sub">${esc(sub)}${sub && ago ? " · " : ""}${ago}</div>
@@ -3907,7 +4192,7 @@ function dashDetailHTML(item) {
   if (item.type==="todo" && Array.isArray(item.subitems) && item.subitems.length) {
     h += `<div style="margin-bottom:6px">`;
     item.subitems.forEach(s => {
-      h += `<div class="dd-sub${s.done?' done':''}" onclick="event.stopPropagation();toggleTodoDone('${item.id}','${s.id}');setTimeout(renderDashboard,100)">
+      h += `<div class="dd-sub${s.done?' done':''}" onclick="event.stopPropagation();toggleTodoDone(${jsArg(item.id)},${jsArg(s.id)});setTimeout(renderDashboard,100)">
         <span class="mk">✓</span><span class="tx">${esc(s.text)}</span>
       </div>`;
     });
@@ -3923,8 +4208,8 @@ function dashDetailHTML(item) {
 
   // Action buttons
   h += `<div class="dd-actions">
-    <button class="dd-act edit" onclick="event.stopPropagation();openEdit('${item.id}')">${UI_SVG.edit}Edit</button>
-    <button class="dd-act del" onclick="event.stopPropagation();askDelete('${item.id}')">${UI_SVG.trash}Delete</button>
+    <button class="dd-act edit" onclick="event.stopPropagation();openEdit(${jsArg(item.id)})">${UI_SVG.edit}Edit</button>
+    <button class="dd-act del" onclick="event.stopPropagation();askDelete(${jsArg(item.id)})">${UI_SVG.trash}Delete</button>
   </div>`;
 
   return h;
@@ -4009,6 +4294,7 @@ function toggleSettings(show) {
     renderSQSettings();
     renderBioSettings();
     renderThemeUI();
+    renderPinStrength();
   } else {
     if (s) s.classList.remove("show");
     if (b) b.classList.remove("show");
@@ -4065,7 +4351,7 @@ function toast(msg, type = "info") {
     </div>
     <div class="toast-content">
       <div class="toast-title toast-title-${type}">${title}</div>
-      <div class="toast-msg">${msg}</div>
+      <div class="toast-msg">${esc(msg)}</div>
     </div>
     <div id="toast-progress" style="width: 100%;"></div>
   `;
@@ -4145,7 +4431,7 @@ function renderSelectedTags() {
     if (item.type === "type") {
       html += `<span class="stag type-pill${focusClass}">⚙️ ${esc(item.value)}<span class="stag-x" onclick="removeActiveType()">\u2715</span></span>`;
     } else {
-      html += `<span class="stag${focusClass}">#${esc(item.value)}<span class="stag-x" onclick="removeActiveTag('${esc(item.value)}')">\u2715</span></span>`;
+      html += `<span class="stag${focusClass}">#${esc(item.value)}<span class="stag-x" onclick="removeActiveTag(${jsArg(item.value)})">\u2715</span></span>`;
     }
   });
 

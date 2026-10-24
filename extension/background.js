@@ -4,84 +4,78 @@ const pendingAutofills = new Map();
 // Volatile in-memory store for synced credentials (cleared when browser restarts or PWA locks)
 let syncedItems = [];
 
-// Helper to extract the main domain/host from any URL string, ignoring subdomains/www
-// and correctly handling country-code second-level domains (ccSLDs like co.uk)
-function extractDomain(url) {
-  if (!url) return "";
-  let hostname = url.trim().toLowerCase();
-  
-  if (hostname.includes("://")) {
-    try {
-      hostname = new URL(hostname).hostname;
-    } catch (e) {
-      hostname = hostname.split("://")[1];
-    }
+// Only the Vault app itself may send messages (also enforced by externally_connectable)
+const ALLOWED_ORIGINS = ["https://superhrk1.github.io", "http://localhost", "http://127.0.0.1"];
+
+function isAllowedSender(sender) {
+  let origin = sender?.origin || "";
+  if (!origin && sender?.url) {
+    try { origin = new URL(sender.url).origin; } catch (e) { origin = ""; }
   }
-  
-  hostname = hostname.split("/")[0].split(":")[0];
-  
-  if (hostname.startsWith("www.")) {
-    hostname = hostname.slice(4);
-  }
-  
-  // Handle IPv4 addresses
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
-    return hostname;
-  }
-  
-  const parts = hostname.split(".");
-  if (parts.length <= 2) {
-    return hostname;
-  }
-  
-  const lastPart = parts[parts.length - 1];
-  const secondLastPart = parts[parts.length - 2];
-  
-  const commonSLDs = new Set(["co", "com", "org", "net", "gov", "edu", "ac", "or", "ne"]);
-  const isccSLD = lastPart.length === 2 && (secondLastPart.length <= 3 && commonSLDs.has(secondLastPart));
-  
-  if (isccSLD) {
-    return parts.slice(-3).join(".");
-  } else {
-    return parts.slice(-2).join(".");
+  return ALLOWED_ORIGINS.some(o => origin === o || origin.startsWith(o + ":"));
+}
+
+function parseUrl(u) {
+  try {
+    const s = String(u || "").trim();
+    const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : "https://" + s);
+    return (url.protocol === "https:" || url.protocol === "http:") ? url : null;
+  } catch (e) {
+    return null;
   }
 }
 
-// Listen for messages from the Vault PWA
+// A saved login may fill on its own host or a subdomain of it — never on a
+// sibling host (a.github.io must not fill on b.github.io), and never on a
+// plain-http page unless the login itself was saved for http.
+function hostMatches(savedUrl, pageUrl) {
+  const saved = parseUrl(savedUrl);
+  const page = parseUrl(pageUrl);
+  if (!saved || !page) return false;
+  if (page.protocol !== "https:" && saved.protocol !== "http:") return false;
+  const strip = h => h.toLowerCase().replace(/^www\./, "");
+  const s = strip(saved.hostname);
+  const p = strip(page.hostname);
+  return p === s || p.endsWith("." + s);
+}
+
+// Listen for messages from the Vault PWA (never log these — they carry passwords)
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
-  console.log("[Vault Extension] Received external message:", message);
-  
+  if (!isAllowedSender(sender)) {
+    sendResponse({ success: false, error: "Sender not allowed" });
+    return true;
+  }
+
   if (message.action === "ping") {
-    sendResponse({ success: true, version: "1.1" });
+    sendResponse({ success: true, version: "1.2" });
     return true;
   }
 
   if (message.action === "syncVault") {
-    syncedItems = message.items || [];
-    console.log("[Vault Extension] Synced", syncedItems.length, "credentials.");
+    syncedItems = Array.isArray(message.items) ? message.items : [];
     sendResponse({ success: true });
     return true;
   }
 
   if (message.action === "clearVault") {
     syncedItems = [];
-    console.log("[Vault Extension] Cleared synced credentials.");
+    pendingAutofills.clear();
     sendResponse({ success: true });
     return true;
   }
 
   if (message.action === "openAndAutofill") {
-    const { url, username, password } = message;
-    if (!url) {
-      sendResponse({ success: false, error: "Missing URL" });
+    const { username, password } = message;
+    const target = parseUrl(message.url);
+    if (!target) {
+      sendResponse({ success: false, error: "Missing or unsupported URL" });
       return true;
     }
 
-    // Open a new tab
-    chrome.tabs.create({ url: url }, (tab) => {
+    chrome.tabs.create({ url: target.href }, (tab) => {
       if (tab && tab.id) {
-        // Store credentials associated with this new tab ID
-        pendingAutofills.set(tab.id, { username, password });
+        // Released only to a page on the requested site — not after a redirect elsewhere
+        pendingAutofills.set(tab.id, { username, password, url: target.href });
         sendResponse({ success: true, tabId: tab.id });
       } else {
         sendResponse({ success: false, error: "Failed to create tab" });
@@ -95,39 +89,30 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getCredentials") {
     const tabId = sender.tab?.id;
-    
-    // 1. Check pendingAutofills first (tabs explicitly launched from PWA)
-    if (tabId && pendingAutofills.has(tabId)) {
-      const credentials = pendingAutofills.get(tabId);
-      // Clean up immediately so they cannot be retrieved again
-      pendingAutofills.delete(tabId);
-      
-      console.log("[Vault Extension] Dispatching pending credentials to tab:", tabId);
-      sendResponse({ hasCredentials: true, ...credentials });
+    // Trust the URL Chrome reports for the tab, never one supplied by the page
+    const pageUrl = sender.url || sender.tab?.url || "";
+
+    // Top frame only — a hidden third-party iframe must never receive credentials
+    if (sender.frameId !== 0 || !pageUrl) {
+      sendResponse({ hasCredentials: false });
       return true;
     }
-    
-    // 2. Match current page's domain against in-memory synced credentials
-    const tabUrl = sender.tab?.url || message.url || "";
-    if (tabUrl) {
-      const tabDomain = extractDomain(tabUrl);
-      if (tabDomain) {
-        const matched = syncedItems.find(item => {
-          if (!item.url) return false;
-          const itemDomain = extractDomain(item.url);
-          return itemDomain === tabDomain;
-        });
-        
-        if (matched) {
-          console.log("[Vault Extension] Domain match found for tab:", tabId, "Domain:", tabDomain);
-          sendResponse({
-            hasCredentials: true,
-            username: matched.username,
-            password: matched.password
-          });
-          return true;
-        }
+
+    // 1. Tabs explicitly opened from the PWA
+    if (tabId && pendingAutofills.has(tabId)) {
+      const pending = pendingAutofills.get(tabId);
+      if (hostMatches(pending.url, pageUrl)) {
+        pendingAutofills.delete(tabId); // single use
+        sendResponse({ hasCredentials: true, username: pending.username, password: pending.password });
+        return true;
       }
+    }
+
+    // 2. Saved logins for this exact site (or its subdomains)
+    const matched = syncedItems.find(item => item && item.url && hostMatches(item.url, pageUrl));
+    if (matched) {
+      sendResponse({ hasCredentials: true, username: matched.username, password: matched.password });
+      return true;
     }
 
     sendResponse({ hasCredentials: false });
@@ -137,8 +122,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Clean up credentials if a tab is closed before it retrieves them
 chrome.tabs.onRemoved.addListener((tabId) => {
-  if (pendingAutofills.has(tabId)) {
-    pendingAutofills.delete(tabId);
-    console.log("[Vault Extension] Cleaned up unused credentials for closed tab:", tabId);
-  }
+  pendingAutofills.delete(tabId);
 });

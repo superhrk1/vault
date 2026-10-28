@@ -4111,7 +4111,8 @@ function renderDashboard() {
     </div>
   </div>`;
 
-  const cloudItems = STATE.items.filter(item => !item.deleted && item.dashboard && item.cloudKeyword && item.cloudKeyword.trim() !== "");
+  // Same order as the cards below: pending (your custom order) first, then completed
+  const cloudItems = [...pending, ...completed].filter(item => item.cloudKeyword && item.cloudKeyword.trim() !== "");
   if (cloudItems.length > 0) {
     const colors = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
     let cloudHtml = `<div class="kw-cloud-container">`;

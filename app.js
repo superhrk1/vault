@@ -66,6 +66,7 @@ const UI_SVG = {
   up:     _svg(`<path d="M18 15l-6-6-6 6"/>`),
   down:   _svg(`<path d="M6 9l6 6 6-6"/>`),
   home:   _svg(`<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>`),
+  shuffle: _svg(`<path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>`),
   filter: _svg(`<path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/>`),
   plus:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`,
 };
@@ -303,6 +304,8 @@ let STATE = {
   mSubitems        : [],
   mColor           : "purple",
   mDashboard       : false,
+  mCloudSize       : "auto",
+  mCloudColor      : "",
   currentFilteredList: [],
   renderLimit      : 50,
   autoLockMin      : 5,
@@ -3137,6 +3140,8 @@ function openAdd() {
   STATE.mSubitems = [];
   STATE.mColor    = TODO_COLORS[Math.floor(Math.random() * TODO_COLORS.length)].name;
   STATE.mDashboard = false;
+  STATE.mCloudSize = "auto";
+  STATE.mCloudColor = "";
   $("add-title").textContent = "Add Item";
   buildForm(tabType, null);
   openOverlay("add-overlay");
@@ -3154,6 +3159,8 @@ function openEdit(id) {
   STATE.mSubitems = (item.subitems||[]).map(s => ({...s}));
   STATE.mColor    = item.color || "purple";
   STATE.mDashboard = item.dashboard || false;
+  STATE.mCloudSize = CLOUD_SIZES[item.cloudSize] ? item.cloudSize : "auto";
+  STATE.mCloudColor = CLOUD_COLORS.includes(item.cloudColor) ? item.cloudColor : "";
   $("add-title").textContent = "Edit Item";
   buildForm(item.type, item);
   openOverlay("add-overlay");
@@ -3267,8 +3274,19 @@ function buildForm(type, pre) {
         </div>
       </div>
       <div id="f-cloud-kw-wrap" style="display:${STATE.mDashboard ? 'block' : 'none'}; margin-top:6px;">
-        <input class="fi" id="f-cloudKeyword" placeholder="Cloud keyword, e.g. Bank" value="${esc(pre?.cloudKeyword||"")}">
-        <div class="fhint" style="margin-top:6px">Optional. Adds a quick-tap word to the Home keyword cloud.</div>
+        <input class="fi" id="f-cloudKeyword" placeholder="Cloud keyword, e.g. Bank" value="${esc(pre?.cloudKeyword||"")}" oninput="updateCloudPreview()">
+        <div class="fhint" style="margin:6px 0 10px">Optional. Adds a quick-tap word to the Home keyword cloud.</div>
+        <div class="fl" style="margin-bottom:8px">Word size</div>
+        <div class="cloud-size-row" id="cloud-size-row">
+          ${Object.entries(CLOUD_SIZES).map(([k, v]) => `<div class="cloud-size${STATE.mCloudSize===k?" on":""}" onclick="selectCloudSize('${k}')"><span style="font-size:${Math.min(v.px || 18, 26)}px">Aa</span><small>${v.label}</small></div>`).join("")}
+        </div>
+        <div class="fl" style="margin:12px 0 8px">Word colour</div>
+        <div class="cloud-color-row" id="cloud-color-row">
+          <div class="cloud-color auto${STATE.mCloudColor===""?" on":""}" data-c="" onclick="selectCloudColor('')">Auto</div>
+          ${CLOUD_COLORS.map(c => `<div class="cloud-color${STATE.mCloudColor===c?" on":""}" data-c="${c}" style="background:${c}" onclick="selectCloudColor('${c}')"></div>`).join("")}
+          <div class="cloud-color shuffle" onclick="shuffleCloudColor()" title="Pick a random colour">${UI_SVG.shuffle}</div>
+        </div>
+        <div class="cloud-preview" id="cloud-preview"></div>
       </div>
     </div>`;
 
@@ -3281,12 +3299,66 @@ function buildForm(type, pre) {
     $("f-password")?.addEventListener("input", updateStrength);
     updateStrength();
   }
+  updateCloudPreview();
 }
 
 function selectPri(val, el) {
   STATE.mPriority = val;
   document.querySelectorAll(".pricard").forEach(c => c.classList.remove("on"));
   el.classList.add("on");
+  updateCloudPreview();
+}
+
+// Home keyword-cloud font sizes. "auto" follows the item's priority.
+const CLOUD_SIZES = {
+  auto: { label:"Auto",  px:0 },
+  xs:   { label:"XS",    px:13 },
+  s:    { label:"S",     px:17 },
+  m:    { label:"M",     px:22 },
+  l:    { label:"L",     px:29 },
+  xl:   { label:"XL",    px:38 },
+};
+function cloudPx(item) {
+  const sz = CLOUD_SIZES[item.cloudSize];
+  if (sz && sz.px) return sz.px;
+  return item.priority === "high" ? 28 : item.priority === "medium" ? 22 : item.priority === "low" ? 15 : 18;
+}
+
+const CLOUD_COLORS = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
+// Auto colour: stable per word (same as before this option existed)
+function cloudAutoColor(word) { return CLOUD_COLORS[(String(word).length * 7) % CLOUD_COLORS.length]; }
+function cloudColorFor(item) {
+  return CLOUD_COLORS.includes(item.cloudColor) ? item.cloudColor : cloudAutoColor((item.cloudKeyword || "").trim());
+}
+
+function selectCloudColor(c) {
+  STATE.mCloudColor = c;
+  document.querySelectorAll("#cloud-color-row .cloud-color[data-c]").forEach(el => el.classList.toggle("on", el.dataset.c === c));
+  updateCloudPreview();
+}
+
+// Random colour, different from the current one; saved with the item
+function shuffleCloudColor() {
+  const cur = STATE.mCloudColor || cloudAutoColor(($("f-cloudKeyword")?.value || "").trim());
+  const pool = CLOUD_COLORS.filter(c => c !== cur);
+  selectCloudColor(pool[Math.floor(rnd(1)[0] / 256 * pool.length)]);
+}
+
+function selectCloudSize(key) {
+  STATE.mCloudSize = key;
+  document.querySelectorAll("#cloud-size-row .cloud-size").forEach(el => el.classList.toggle("on", el.getAttribute("onclick").includes(`'${key}'`)));
+  updateCloudPreview();
+}
+
+function updateCloudPreview() {
+  const el = $("cloud-preview");
+  if (!el) return;
+  const word = ($("f-cloudKeyword")?.value || "").trim();
+  if (!word) { el.style.display = "none"; return; }
+  const px = cloudPx({ cloudSize: STATE.mCloudSize, priority: STATE.mPriority });
+  el.style.display = "";
+  const color = CLOUD_COLORS.includes(STATE.mCloudColor) ? STATE.mCloudColor : cloudAutoColor(word);
+  el.innerHTML = `<span class="cloud-kw" style="font-size:${px}px;color:${color};animation:none">${esc(word)}</span>`;
 }
 
 function toggleDashSwitch() {
@@ -3295,6 +3367,7 @@ function toggleDashSwitch() {
   if (sw) sw.classList.toggle("on", STATE.mDashboard);
   const kwWrap = document.getElementById("f-cloud-kw-wrap");
   if (kwWrap) kwWrap.style.display = STATE.mDashboard ? "block" : "none";
+  updateCloudPreview();
 }
 
 function switchType(type, el) {
@@ -3562,6 +3635,8 @@ async function submitItem() {
     flagDate : fv("f-flagDate") || null,
     dashboard: STATE.mDashboard || false,
     cloudKeyword: fv("f-cloudKeyword"),
+    cloudSize: STATE.mCloudSize === "auto" ? "" : STATE.mCloudSize,
+    cloudColor: CLOUD_COLORS.includes(STATE.mCloudColor) ? STATE.mCloudColor : "",
   };
   // Todo-specific fields
   if (itemType === "todo") {
@@ -4114,20 +4189,17 @@ function renderDashboard() {
   // Same order as the cards below: pending (your custom order) first, then completed
   const cloudItems = [...pending, ...completed].filter(item => item.cloudKeyword && item.cloudKeyword.trim() !== "");
   if (cloudItems.length > 0) {
-    const colors = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
     let cloudHtml = `<div class="kw-cloud-container">`;
     cloudItems.forEach(item => {
-       let size = 18;
-       if (item.priority === "high") size = 28;
-       else if (item.priority === "medium") size = 22;
-       else if (item.priority === "low") size = 15;
+       const size = cloudPx(item);
        const dispStr = item.cloudKeyword.trim();
-       const randColor = colors[(dispStr.length * 7) % colors.length];
+       const randColor = cloudColorFor(item);
        const pseudoRand = (dispStr.length * 13) % 10;
-       cloudHtml += `<span class="cloud-kw" style="font-size: ${size}px; color:${randColor}; animation-delay:-${pseudoRand}s;" onclick="event.stopPropagation(); dashToggleExpand(${jsArg(item.id)})">${esc(dispStr)}</span>`;
+       cloudHtml += `<span class="cloud-kw" style="font-size:${size}px;color:${randColor};animation-delay:-${pseudoRand}s" data-px="${size}" onclick="event.stopPropagation(); dashToggleExpand(${jsArg(item.id)})">${esc(dispStr)}</span>`;
     });
     cloudHtml += `</div>`;
     html += cloudHtml;
+    fitCloudNextFrame = true;
   }
 
   if (!allDash.length) {
@@ -4149,7 +4221,27 @@ function renderDashboard() {
     completed.forEach(item => { html += dashCardHTML(item,true,-1,-1); });
   }
   el.innerHTML = html;
+  if (fitCloudNextFrame) { fitCloudNextFrame = false; fitCloud(); }
 }
+
+// Pack the word cloud into a compact box: if it grows taller than the limit,
+// scale every word down together (keeping their relative sizes) until it fits.
+let fitCloudNextFrame = false;
+function fitCloud() {
+  const box = document.querySelector(".kw-cloud-container");
+  if (!box) return;
+  const words = [...box.querySelectorAll(".cloud-kw")];
+  const MAX_H = Math.min(190, Math.round(window.innerHeight * 0.26));
+  const MIN_SCALE = 0.55;
+  let scale = 1;
+  const apply = s => words.forEach(w => { w.style.fontSize = Math.max(11, +w.dataset.px * s).toFixed(1) + "px"; });
+  apply(1);
+  for (let i = 0; i < 14 && box.offsetHeight > MAX_H && scale > MIN_SCALE; i++) {
+    scale = Math.max(MIN_SCALE, scale * 0.92);
+    apply(scale);
+  }
+}
+window.addEventListener("resize", () => { if (document.querySelector(".kw-cloud-container")) fitCloud(); });
 
 function dashCardHTML(item, isDone, idx, total) {
   const DCLS = {password:"dc-pw",bookmark:"dc-bm",note:"dc-nt",todo:"dc-td"};

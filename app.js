@@ -306,6 +306,7 @@ let STATE = {
   mDashboard       : false,
   mCloudSize       : "auto",
   mCloudColor      : "",
+  mCloudPalette    : [],
   currentFilteredList: [],
   renderLimit      : 50,
   autoLockMin      : 5,
@@ -3142,6 +3143,7 @@ function openAdd() {
   STATE.mDashboard = false;
   STATE.mCloudSize = "auto";
   STATE.mCloudColor = "";
+  STATE.mCloudPalette = [...CLOUD_COLORS];
   $("add-title").textContent = "Add Item";
   buildForm(tabType, null);
   openOverlay("add-overlay");
@@ -3160,7 +3162,8 @@ function openEdit(id) {
   STATE.mColor    = item.color || "purple";
   STATE.mDashboard = item.dashboard || false;
   STATE.mCloudSize = CLOUD_SIZES[item.cloudSize] ? item.cloudSize : "auto";
-  STATE.mCloudColor = CLOUD_COLORS.includes(item.cloudColor) ? item.cloudColor : "";
+  STATE.mCloudColor = isCloudColor(item.cloudColor) ? item.cloudColor.toLowerCase() : "";
+  STATE.mCloudPalette = cloudPaletteFor(STATE.mCloudColor);
   $("add-title").textContent = "Edit Item";
   buildForm(item.type, item);
   openOverlay("add-overlay");
@@ -3283,8 +3286,8 @@ function buildForm(type, pre) {
         <div class="fl" style="margin:12px 0 8px">Word colour</div>
         <div class="cloud-color-row" id="cloud-color-row">
           <div class="cloud-color auto${STATE.mCloudColor===""?" on":""}" data-c="" onclick="selectCloudColor('')">Auto</div>
-          ${CLOUD_COLORS.map(c => `<div class="cloud-color${STATE.mCloudColor===c?" on":""}" data-c="${c}" style="background:${c}" onclick="selectCloudColor('${c}')"></div>`).join("")}
-          <div class="cloud-color shuffle" onclick="shuffleCloudColor()" title="Pick a random colour">${UI_SVG.shuffle}</div>
+          <span id="cloud-swatches" style="display:contents">${cloudSwatchesHTML()}</span>
+          <div class="cloud-color shuffle" onclick="shuffleCloudColor()" title="New set of colours">${UI_SVG.shuffle}</div>
         </div>
         <div class="cloud-preview" id="cloud-preview"></div>
       </div>
@@ -3327,8 +3330,26 @@ function cloudPx(item) {
 const CLOUD_COLORS = ["#4ade80", "#f87171", "#fbbf24", "#60a5fa", "#22d3ee", "#a855f7", "#e879f9", "#34d399", "#f472b6", "#fb923c"];
 // Auto colour: stable per word (same as before this option existed)
 function cloudAutoColor(word) { return CLOUD_COLORS[(String(word).length * 7) % CLOUD_COLORS.length]; }
+// Saved colours may be any #rrggbb (from a shuffled set); nothing else is ever put in a style attribute
+const isCloudColor = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
 function cloudColorFor(item) {
-  return CLOUD_COLORS.includes(item.cloudColor) ? item.cloudColor : cloudAutoColor((item.cloudKeyword || "").trim());
+  return isCloudColor(item.cloudColor) ? item.cloudColor : cloudAutoColor((item.cloudKeyword || "").trim());
+}
+// A saved colour that isn't in the default set stays available as the first swatch
+function cloudPaletteFor(color) {
+  return color && !CLOUD_COLORS.includes(color) ? [color, ...CLOUD_COLORS.slice(0, 9)] : [...CLOUD_COLORS];
+}
+
+function cloudSwatchesHTML() {
+  const pal = STATE.mCloudPalette.length ? STATE.mCloudPalette : CLOUD_COLORS;
+  return pal.map(c => `<div class="cloud-color${STATE.mCloudColor===c?" on":""}" data-c="${c}" style="background:${c}" onclick="selectCloudColor('${c}')"></div>`).join("");
+}
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return "#" + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, "0")).join("");
 }
 
 function selectCloudColor(c) {
@@ -3337,11 +3358,19 @@ function selectCloudColor(c) {
   updateCloudPreview();
 }
 
-// Random colour, different from the current one; saved with the item
+// Shuffle replaces every swatch with a brand-new random set; tap one to use it.
+// Hues are spread evenly from a random start so the ten colours stay distinct,
+// with lightness/saturation tuned to read on both dark and light themes.
 function shuffleCloudColor() {
-  const cur = STATE.mCloudColor || cloudAutoColor(($("f-cloudKeyword")?.value || "").trim());
-  const pool = CLOUD_COLORS.filter(c => c !== cur);
-  selectCloudColor(pool[Math.floor(rnd(1)[0] / 256 * pool.length)]);
+  const r = rnd(24);
+  const start = (r[0] / 256) * 360;
+  const hues = Array.from({ length: 10 }, (_, i) => (start + i * 36 + (r[i + 1] / 256) * 16 - 8 + 360) % 360);
+  // shuffle order (Fisher–Yates)
+  for (let i = hues.length - 1; i > 0; i--) { const j = Math.floor((r[11 + (i % 12)] / 256) * (i + 1)); [hues[i], hues[j]] = [hues[j], hues[i]]; }
+  STATE.mCloudPalette = hues.map((h, i) => hslToHex(h, 78 + (r[i + 12] % 14), 60 + (r[i + 2] % 10)));
+  const sw = $("cloud-swatches");
+  if (sw) sw.innerHTML = cloudSwatchesHTML();
+  document.querySelectorAll("#cloud-color-row .cloud-color[data-c]").forEach(el => el.classList.toggle("on", el.dataset.c === STATE.mCloudColor));
 }
 
 function selectCloudSize(key) {
@@ -3357,7 +3386,7 @@ function updateCloudPreview() {
   if (!word) { el.style.display = "none"; return; }
   const px = cloudPx({ cloudSize: STATE.mCloudSize, priority: STATE.mPriority });
   el.style.display = "";
-  const color = CLOUD_COLORS.includes(STATE.mCloudColor) ? STATE.mCloudColor : cloudAutoColor(word);
+  const color = isCloudColor(STATE.mCloudColor) ? STATE.mCloudColor : cloudAutoColor(word);
   el.innerHTML = `<span class="cloud-kw" style="font-size:${px}px;color:${color};animation:none">${esc(word)}</span>`;
 }
 
@@ -3636,7 +3665,7 @@ async function submitItem() {
     dashboard: STATE.mDashboard || false,
     cloudKeyword: fv("f-cloudKeyword"),
     cloudSize: STATE.mCloudSize === "auto" ? "" : STATE.mCloudSize,
-    cloudColor: CLOUD_COLORS.includes(STATE.mCloudColor) ? STATE.mCloudColor : "",
+    cloudColor: isCloudColor(STATE.mCloudColor) ? STATE.mCloudColor.toLowerCase() : "",
   };
   // Todo-specific fields
   if (itemType === "todo") {

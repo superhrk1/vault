@@ -4313,7 +4313,9 @@ function dismissBanner() {
 function openOverlay(id)  { $(id).classList.add("open"); }
 function closeOverlay(id) { $(id).classList.remove("open"); }
 document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll(".overlay").forEach(o => {
+  // The add/edit sheet only closes via Save, Cancel or ✕ — a stray tap outside
+  // must not throw away what's been typed. Other overlays still close on backdrop tap.
+  document.querySelectorAll(".overlay:not(#add-overlay)").forEach(o => {
     o.addEventListener("click", e => { if (e.target === o) o.classList.remove("open"); });
   });
 });
